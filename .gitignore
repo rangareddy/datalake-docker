@@ -2,5 +2,7 @@
 kafka-connectors/plugins/hudi-kafka-connector
 logs
 data
-hudi*
+hudi/
+hudi_0_15_0/
+hudi_1_0_0/
 hadoop-s3-jars

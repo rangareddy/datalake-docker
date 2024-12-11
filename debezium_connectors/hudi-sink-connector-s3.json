@@ -1,0 +1,28 @@
+{
+  "name": "hudi-sink-connector-s3",
+  "config": {
+    "bootstrap.servers": "kafka:29092",
+    "connector.class": "org.apache.hudi.connect.HoodieSinkConnector",
+    "tasks.max": "1",
+    "key.converter": "org.apache.kafka.connect.storage.StringConverter",
+    "value.converter": "org.apache.kafka.connect.storage.StringConverter",
+    "value.converter.schemas.enable": "false",
+    "topics": "hudi-test-topic",
+    "hoodie.table.name": "hudi_test_table",
+    "hoodie.table.type": "MERGE_ON_READ",
+    "hoodie.base.path": "s3a://warehouse/hudi_test_table/",
+    "fs.s3a.connection.ssl.enabled": "false",
+    "fs.s3a.endpoint": "http://minio:9000",
+    "fs.s3a.access.key": "admin",
+    "fs.s3a.secret.key": "password",
+    "fs.s3a.path.style.access": "true",
+    "fs.s3a.impl": "org.apache.hadoop.fs.s3a.S3AFileSystem",
+    "fs.s3a.aws.credentials.provider": "org.apache.hadoop.fs.s3a.SimpleAWSCredentialsProvider",
+    "fs.s3a.endpoint.region": "us-east-1",
+    "hoodie.datasource.write.recordkey.field": "volume",
+    "hoodie.datasource.write.partitionpath.field": "date",
+    "hoodie.schemaprovider.class": "org.apache.hudi.schema.SchemaRegistryProvider",
+    "hoodie.streamer.schemaprovider.registry.url": "http://kafka-schema-registry:8081/subjects/hudi-test-topic/versions/latest",
+    "hoodie.kafka.commit.interval.secs": 60
+  }
+}
