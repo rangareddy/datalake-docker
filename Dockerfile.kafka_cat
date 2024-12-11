@@ -1,0 +1,17 @@
+ARG CONFLUENT_KAFKACAT_VERSION=${CONFLUENT_KAFKACAT_VERSION:-7.1.15}
+FROM confluentinc/cp-kafkacat:$CONFLUENT_KAFKACAT_VERSION
+
+LABEL maintainer="Ranga Reddy"
+USER root
+
+RUN set -ex; \
+    yum update -y && yum install -y curl wget vim git jq;
+
+RUN mkdir -p /opt/data && \
+	git clone https://github.com/rangareddy/hudi-kafka-connect-demo.git /opt/data/hudi-kafka-connect-demo && \
+	chown appuser:root -R /opt/data
+
+USER appuser
+
+CMD ["sleep", "infinity"]
+

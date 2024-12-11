@@ -1,0 +1,42 @@
+ARG KAFKA_CONNECT_VERSION=${KAFKA_CONNECT_VERSION:-7.4.7}
+FROM confluentinc/cp-server-connect-base:$KAFKA_CONNECT_VERSION
+
+LABEL maintainer="Ranga Reddy"
+USER root
+
+RUN set -ex; \
+    yum update -y && yum install -y curl wget tar vim git jq;
+
+ARG CONFLUENT_HUB_COMPONENTS="/usr/share/confluent-hub-components"
+ARG CONNECTORS_PATH="/opt/connectors"
+ARG DATA_PATH="/opt/data"
+
+ENV CONNECT_PLUGIN_PATH="/usr/share/java,$CONFLUENT_HUB_COMPONENTS,$CONNECTORS_PATH" \
+	CONNECT_LOG4J_ROOT_LOGLEVEL="INFO" \
+	CONNECT_CONFIG_STORAGE_REPLICATION_FACTOR="1" \
+	CONNECT_OFFSET_STORAGE_REPLICATION_FACTOR="1" \
+	CONNECT_STATUS_STORAGE_REPLICATION_FACTOR="1" \
+	CONNECT_CONFIG_STORAGE_TOPIC="_connect_configs" \
+	CONNECT_STATUS_STORAGE_TOPIC="_connect_statuses" \
+	CONNECT_OFFSET_STORAGE_TOPIC="_connect_offsets" \
+	HUDI_KAFKA_CONNECTOR_PATH=$CONFLUENT_HUB_COMPONENTS/hudi-kafka-connector/
+
+RUN mkdir -p $CONNECTORS_PATH && mkdir -p $DATA_PATH && mkdir -p $HUDI_KAFKA_CONNECTOR_PATH && \
+	confluent-hub install --no-prompt confluentinc/kafka-connect-hdfs2-source:latest && \
+    confluent-hub install --no-prompt confluentinc/kafka-connect-hdfs3:latest && \
+    confluent-hub install --no-prompt confluentinc/kafka-connect-hdfs3-source:latest && \
+    confluent-hub install --no-prompt confluentinc/kafka-connect-s3:latest && \
+    confluent-hub install --no-prompt confluentinc/kafka-connect-s3-source:latest && \
+    confluent-hub install --no-prompt confluentinc/kafka-connect-jdbc:latest && \
+    confluent-hub install --no-prompt debezium/debezium-connector-mysql:latest && \
+    confluent-hub install --no-prompt debezium/debezium-connector-postgresql:latest && \
+    cp -r /usr/share/confluent-hub-components/confluentinc-kafka-connect-hdfs3/lib $HUDI_KAFKA_CONNECTOR_PATH/lib
+
+COPY hadoop-s3-jars/* $HUDI_KAFKA_CONNECTOR_PATH/
+COPY hudi_0_15_0/packaging/hudi-kafka-connect-bundle/target/hudi-kafka-connect-bundle-*.jar $HUDI_KAFKA_CONNECTOR_PATH/
+
+RUN git clone https://github.com/rangareddy/hudi-kafka-connect-demo.git $DATA_PATH/hudi-kafka-connect-demo && \
+	chown appuser:root -R $CONNECTORS_PATH $DATA_PATH
+
+USER appuser
+

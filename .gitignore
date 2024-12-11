@@ -1,0 +1,6 @@
+.DS_Store
+kafka-connectors/plugins/hudi-kafka-connector
+logs
+data
+hudi*
+hadoop-s3-jars

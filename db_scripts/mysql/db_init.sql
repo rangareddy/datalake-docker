@@ -1,0 +1,4 @@
+CREATE DATABASE IF NOT EXISTS metastore_db;
+CREATE USER IF NOT EXISTS hive@'%' IDENTIFIED BY 'hive';
+GRANT ALL ON metastore_db.* to hive;
+FLUSH PRIVILEGES;

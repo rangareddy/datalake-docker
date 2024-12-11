@@ -1,0 +1,46 @@
+ARG SPARK_VERSION=${SPARK_VERSION:-3.5.3}
+FROM bitnami/spark:$SPARK_VERSION
+
+LABEL maintainer="Ranga Reddy"
+USER root
+
+RUN set -ex; \
+    apt-get update; \
+    apt-get install -y python3 python3-pip curl telnet wget tar vim; \
+    rm -rf /var/lib/apt/lists/*
+
+ARG SPARK_HOME=${SPARK_HOME:-/opt/bitnami/spark}
+ARG HUDI_HOME=${HUDI_HOME:-/opt/hudi}
+
+ENV SPARK_HOME=$SPARK_HOME \
+    SPARK_CONF=$SPARK_HOME/conf \
+    HUDI_HOME=${HUDI_HOME:-/opt/hudi}
+
+COPY hadoop-s3-jars/* $SPARK_HOME/jars/
+COPY hudi_0_15_0 $HUDI_HOME
+COPY hudi_1_0_0 /opt/hudi_1_0_0
+
+RUN echo "Installing the AWS Cli"; \
+    pip install -q --upgrade awscli; \
+    echo "AWS Cli Installed Successfully"; \
+    echo "Printing AWS Version"; \
+    aws --version;
+
+RUN echo "Installing the PyIceberg"; \
+    pip3 install -q pyiceberg[pyarrow,duckdb,pandas]; \
+    echo "PyIceberg Installed Successfully";
+
+RUN echo "Installing the Delta Spark"; \
+    pip3 install -q delta-spark deltalake; \
+    echo "Delta Spark Installed Successfully";
+
+RUN echo "Installing the Hudi Spark"; \
+    pip3 install hudi; \
+    echo "Hudi Spark Installed Successfully";
+
+COPY conf/spark/spark-defaults.conf $SPARK_CONF/
+COPY conf/spark/core-site.xml $SPARK_CONF/
+COPY conf/spark/hudi-defaults.conf $SPARK_CONF/
+
+WORKDIR $SPARK_HOME
+USER 1001

@@ -1,0 +1,30 @@
+ARG HIVE_VERSION=${HIVE_VERSION:-4.0.0}
+FROM apache/hive:$HIVE_VERSION
+
+LABEL maintainer="Ranga Reddy"
+USER root
+
+RUN apt-get update && \
+		apt-get install curl -y telnet && \
+		mkdir -p /home/hive/.beeline && \
+    chown hive /home/hive/.beeline
+
+RUN echo "Copying the requried jars." \
+  && ln -sf $HADOOP_HOME/share/hadoop/common/lib/guava-27.0-jre.jar $HIVE_HOME/lib/ \
+  && ln -sf $HADOOP_HOME/share/hadoop/tools/lib/aws-java-sdk-bundle-*.jar $HIVE_HOME/lib/ \
+	&& ln -sf $HADOOP_HOME/share/hadoop/tools/lib/hadoop-aws*.jar $HIVE_HOME/lib/ \
+	&& ln -sf $HADOOP_HOME/share/hadoop/tools/lib/aws-java-sdk-bundle-*.jar $HADOOP_HOME/share/hadoop/common/lib/ \
+	&& ln -sf $HADOOP_HOME/share/hadoop/tools/lib/hadoop-aws-$HADOOP_VERSION.jar $HADOOP_HOME/share/hadoop/common/lib/ \
+	&& rm /opt/hive/lib/log4j-slf4j-impl-*.jar
+
+ENV POSTGRES_JDBC_VERSION=${POSTGRES_JDBC_VERSION:-42.7.3} \
+		MYSQL_CONNECTOR_JAVA_VERSION=${MYSQL_CONNECTOR_JAVA_VERSION:-8.0.29}
+
+RUN curl -s -L https://jdbc.postgresql.org/download/postgresql-$POSTGRES_JDBC_VERSION.jar -o $HIVE_HOME/lib/postgresql-jdbc.jar && \
+		curl -s -L https://repo1.maven.org/maven2/mysql/mysql-connector-java/$MYSQL_CONNECTOR_JAVA_VERSION/mysql-connector-java-$MYSQL_CONNECTOR_JAVA_VERSION.jar \
+ 		-o $HIVE_HOME/lib/mysql-connector-java.jar
+
+COPY conf/hive/hive-site.xml $HIVE_HOME/conf/
+COPY conf/hive/beeline-site.xml $HIVE_HOME/conf/
+
+USER hive
