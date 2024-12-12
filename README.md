@@ -269,6 +269,9 @@ employeesDF.show(truncate=false)
 
 ## Hudi Multi Table Streamer Example
 
+```sql
+
+```
 
 `vi /opt/data/connectors/register_employees_pg_connector.json`
 
@@ -286,9 +289,8 @@ employeesDF.show(truncate=false)
     "database.dbname": "postgres",
     "topic.prefix": "fulfillment",
     "database.server.name": "postgres",
-    "publication.name" : "dbz_publication",
     "schema.include.list" : "public",
-    "table.include.list" : "public.employee_table1,public.employee_table2",
+    "table.include.list" : "public.employee1,public.employee2",
     "publication.autocreate.mode": "filtered",
     "tombstones.on.delete": "false",
     "key.converter": "io.confluent.connect.avro.AvroConverter",
@@ -319,7 +321,7 @@ hoodie.datasource.hive_sync.use_jdbc=false
 hoodie.datasource.hive_sync.partition_extractor_class=org.apache.hudi.hive.MultiPartKeysValueExtractor
 ```
 
-`vi /opt/hudi-streamer-conf/multi-table-conf/default_employee_table1_config.properties`
+`vi /opt/hudi-streamer-conf/multi-table-conf/default_employee1_config.properties`
 
 ```properties
 include=/opt/hudi-streamer-conf/multi-table-conf/common.properties
@@ -348,7 +350,7 @@ group.id=multi-table-group
 schema.registry.url=http://kafka-schema-registry:8081
 ```
 
-`vi /opt/hudi-streamer-conf/multi-table-conf/default_employee_table2_config.properties`
+`vi /opt/hudi-streamer-conf/multi-table-conf/default_employee2_config.properties`
 
 ```properties
 hoodie.datasource.write.recordkey.field=id
@@ -396,28 +398,55 @@ hoodie.datasource.write.keygenerator.class=org.apache.hudi.keygen.ComplexKeyGene
 hoodie.datasource.write.drop.partition.columns=false
 ```
 
-`vi /opt/hudi-streamer-conf/spark-conf/spark-conf.properties`
-
-```properties
-spark.serializer=org.apache.spark.serializer.KryoSerializer
-spark.sql.catalog.spark_catalog=org.apache.spark.sql.hudi.catalog.HoodieCatalog
-spark.sql.extensions=org.apache.spark.sql.hudi.HoodieSparkSessionExtension
-spark.kryo.registrator=org.apache.spark.HoodieSparkKryoRegistrar
-spark.sql.hive.convertMetastoreParquet=false
-spark.driver.memory=2g
-spark.executor.memory=2g
-```
-
 ```sh
 export HUDI_UTILITIES_JAR=$(ls $HUDI_HOME/packaging/hudi-utilities-bundle/target/hudi-utilities-bundle*.jar)
+#export HUDI_UTILITIES_JAR=$(ls $HUDI_HOME/packaging/hudi-utilities-slim-bundle/target/hudi-utilities-slim-bundle*.jar)
 ```
 
 ```sh
 spark-submit \
-  --properties-file /opt/hudi-streamer-conf/spark-conf/spark-conf.properties \
   --class org.apache.hudi.utilities.streamer.HoodieMultiTableStreamer $HUDI_UTILITIES_JAR \
   --props file:///opt/hudi-streamer-conf/multi-table-stream-conf/hudi-multi-table-stream-conf.properties \
   --config-folder file:///opt/hudi-streamer-conf/multi-table-conf \
+  --schemaprovider-class org.apache.hudi.utilities.schema.SchemaRegistryProvider \
+  --source-class org.apache.hudi.utilities.sources.debezium.PostgresDebeziumSource \
+  --payload-class org.apache.hudi.common.model.debezium.PostgresDebeziumAvroPayload \
+  --base-path-prefix s3a://warehouse/multi-table/ \
+  --source-ordering-field _event_lsn \
+  --table-type COPY_ON_WRITE \
+  --enable-sync \
+  --op UPSERT \
+  --source-limit 4000000 \
+  --min-sync-interval-seconds 60
+```
+
+```sh
+spark-submit \
+  --class org.apache.hudi.utilities.streamer.HoodieMultiTableStreamer $HUDI_UTILITIES_JAR \
+  --props file:///opt/hudi_streamer/hudi_multi_table_stream.properties \
+  --config-folder file:///opt/hudi_streamer/ \
+  --schemaprovider-class org.apache.hudi.utilities.schema.SchemaRegistryProvider \
+  --source-class org.apache.hudi.utilities.sources.debezium.PostgresDebeziumSource \
+  --payload-class org.apache.hudi.common.model.debezium.PostgresDebeziumAvroPayload \
+  --base-path-prefix s3a://warehouse/multi-table/ \
+  --source-ordering-field _event_lsn \
+  --table-type COPY_ON_WRITE \
+  --enable-sync \
+  --op UPSERT \
+  --source-limit 4000000 \
+  --min-sync-interval-seconds 60
+```
+
+```sh
+export HUDI1_UTILITIES_JAR=$(ls /opt/hudi_1_0_0//packaging/hudi-utilities-bundle/target/hudi-utilities-bundle*.jar)
+#export HUDI1_UTILITIES_JAR=$(ls /opt/hudi_1_0_0//packaging/hudi-utilities-slim-bundle/target/*.jar)
+```
+
+```sh
+spark-submit \
+  --class org.apache.hudi.utilities.streamer.HoodieMultiTableStreamer $HUDI1_UTILITIES_JAR \
+  --props file:///opt/hudi_streamer/hudi_multi_table_stream.properties \
+  --config-folder file:///opt/hudi_streamer/ \
   --schemaprovider-class org.apache.hudi.utilities.schema.SchemaRegistryProvider \
   --source-class org.apache.hudi.utilities.sources.debezium.PostgresDebeziumSource \
   --payload-class org.apache.hudi.common.model.debezium.PostgresDebeziumAvroPayload \
