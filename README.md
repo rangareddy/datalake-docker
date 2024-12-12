@@ -1,19 +1,12 @@
-# Debezium Connector for PostgreSQL
+# Datalake Docker
 
-## Apache Kafka
+## Start the Container
 
-Apache Kafka is a messaging system that allows clients to publish and read streams of data (also called events). It has an ecosystem of open-source solutions that you can combine to store, process and integrate these data streams with other parts of your system in a secure, reliable and scalable way.
+To start the services defined in your docker-compose.yml file, use the following command:
 
-## Kafka Connect
-
-To build integration solutions, you can use the Kafka Connect framework, which provides a suite of connectors to integrate Kafka with external systems. There are two types of Kafka connectors:
-
-1. Source connector, used to move data from source systems to Kafka topics
-2. Sink connector, used to send data from Kafka topics into the target (sink) system.
-
-## Debezium
-
-Debezium is a set of distributed services that capture row-level changes in your databases so that your applications can see and respond to those changes. Debezium records in a transaction log all row-level changes committed to each database table. Each application simply reads the transaction logs they’re interested in, seeing all the events in the same order they occur.
+```sh
+% docker-compose up --force-recreate -d
+```
 
 ## Components
 
@@ -31,16 +24,8 @@ Debezium is a set of distributed services that capture row-level changes in your
 | Spark Master UI        | http://localhost:8080  |                                              |
 | Spark Worker UI        | http://localhost:18081 |                                              |
 | Trino UI               | http://localhost:9084  |                                              |
-| Minio UI               | http://localhost:9001  |                                              |
-| MySQL                  | http://localhost:3306  |                                              |
-
-## Start the Container
-
-To start the services defined in your docker-compose.yml file, use the following command:
-
-```sh
-% docker-compose up --force-recreate -d
-```
+| Minio UI               | http://localhost:9001  | **Username:** admin **Password**:password    |
+| MySQL                  | http://localhost:3306  | **Username:** admin **Password**:password    |
 
 ## Connect to Postgres DB
 
