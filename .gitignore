@@ -1,7 +1,21 @@
+### Custom
+__pycache__/
 .DS_Store
+logs/
+
+### Intellij
+.idea/
+out/
+*.iws
+*.iml
+*.ipr
+
+### VS Code
+.vscode/
+
+# Datalake
 kafka-connectors/plugins/hudi-kafka-connector
-logs
-data
+data/
 hudi/
 hudi_0_15_0/
 hudi_1_0_0/

@@ -1,11 +1,11 @@
-# Datalake Docker
+# Datalake Playground Docker
 
-## Start the Container
+## Start all the services
 
-To start the services defined in your docker-compose.yml file, use the following command:
+To start the all services, use the following command:
 
 ```sh
-% docker-compose up --force-recreate -d
+% docker-compose up -d
 ```
 
 ## Components
@@ -206,11 +206,6 @@ hoodie.deltastreamer.source.kafka.topic=fulfillment.inventory.employees
 hoodie.datasource.write.recordkey.field=id
 hoodie.datasource.write.schema.allow.auto.evolution.column.drop=true
 hoodie.datasource.write.keygenerator.class=org.apache.hudi.keygen.NonpartitionedKeyGenerator
-hoodie.metrics.on=true
-hoodie.metrics.reporter.type=GRAPHITE
-hoodie.metrics.graphite.host=graphite
-hoodie.metrics.graphite.port=2003
-hoodie.metrics.graphite.metric.prefix=hudi_metrics
 ```
 
 Run the Hudi Delta Streamer
@@ -272,3 +267,165 @@ val employeesDF = spark.read.format("hudi").load(basePath)
 employeesDF.show(truncate=false)
 ```
 
+## Hudi Multi Table Streamer Example
+
+
+`vi /opt/data/connectors/register_employees_pg_connector.json`
+
+```json
+{
+  "name": "employees_postgres_connector",
+  "config": {
+    "connector.class": "io.debezium.connector.postgresql.PostgresConnector",
+    "plugin.name": "pgoutput",
+    "slot.name": "debezium",
+    "database.hostname": "postgres",
+    "database.port": "5432",
+    "database.user": "postgres",
+    "database.password": "postgres",
+    "database.dbname": "postgres",
+    "topic.prefix": "fulfillment",
+    "database.server.name": "postgres",
+    "publication.name" : "dbz_publication",
+    "schema.include.list" : "public",
+    "table.include.list" : "public.employee_table1,public.employee_table2",
+    "publication.autocreate.mode": "filtered",
+    "tombstones.on.delete": "false",
+    "key.converter": "io.confluent.connect.avro.AvroConverter",
+    "key.converter.schema.registry.url": "http://kafka-schema-registry:8081/",
+    "value.converter": "io.confluent.connect.avro.AvroConverter",
+    "value.converter.schema.registry.url": "http://kafka-schema-registry:8081/"
+  }
+}
+```
+
+```sh
+curl -X POST \
+  -H "Accept:application/json" \
+  -H "Content-Type:application/json" \
+  localhost:8083/connectors/ \
+  -d @/opt/data/connectors/register_employees_pg_connector.json
+```
+
+`mkdir -p /opt/hudi-streamer-conf/{multi-table-conf,multi-table-stream-conf,spark-conf}`
+
+
+`vi /opt/hudi-streamer-conf/multi-table-conf/common.properties`
+
+```properties
+hoodie.datasource.write.hive_style_partitioning=true
+hoodie.datasource.write.keygenerator.class=org.apache.hudi.keygen.ComplexKeyGenerator
+hoodie.datasource.hive_sync.use_jdbc=false
+hoodie.datasource.hive_sync.partition_extractor_class=org.apache.hudi.hive.MultiPartKeysValueExtractor
+```
+
+`vi /opt/hudi-streamer-conf/multi-table-conf/default_employee_table1_config.properties`
+
+```properties
+include=/opt/hudi-streamer-conf/multi-table-conf/common.properties
+hoodie.datasource.write.recordkey.field=id
+hoodie.datasource.write.partitionpath.field=department
+hoodie.datasource.write.hive_style_partitioning=true
+
+hoodie.datasource.meta.sync.enable=true
+hoodie.datasource.hive_sync.enable=true
+hoodie.datasource.hive_sync.mode=hms
+hoodie.datasource.hive_sync.metastore.uris=thrift://hive-metastore:9083
+hoodie.datasource.hive_sync.database=default
+hoodie.datasource.hive_sync.table=employee_table1
+hoodie.datasource.hive_sync.partition_extractor_class=org.apache.hudi.hive.MultiPartKeysValueExtractor
+
+#hoodie.streamer.source.kafka.value.deserializer.class=io.confluent.kafka.serializers.KafkaAvroDeserializer
+#hoodie.streamer.ingestion.targetBasePath=s3a://warehouse/default_employee_table1/
+
+hoodie.streamer.source.kafka.topic=fulfillment.public.employee_table1
+hoodie.streamer.schemaprovider.registry.url=http://kafka-schema-registry:8081/subjects/fulfillment.public.employee_table1-value/versions/latest
+hoodie.streamer.source.dfs.root=s3a://warehouse/default_employee_table1/
+
+bootstrap.servers=kafka:29092
+auto.offset.reset=earliest
+group.id=multi-table-group
+schema.registry.url=http://kafka-schema-registry:8081
+```
+
+`vi /opt/hudi-streamer-conf/multi-table-conf/default_employee_table2_config.properties`
+
+```properties
+hoodie.datasource.write.recordkey.field=id
+hoodie.datasource.write.partitionpath.field=department
+hoodie.datasource.write.hive_style_partitioning=true
+
+hoodie.datasource.meta.sync.enable=true
+hoodie.datasource.hive_sync.enable=true
+hoodie.datasource.hive_sync.mode=hms
+hoodie.datasource.hive_sync.metastore.uris=thrift://hive-metastore:9083
+hoodie.datasource.hive_sync.database=default
+hoodie.datasource.hive_sync.table=employee_table2
+hoodie.datasource.hive_sync.partition_extractor_class=org.apache.hudi.hive.MultiPartKeysValueExtractor
+
+#hoodie.streamer.source.kafka.value.deserializer.class=io.confluent.kafka.serializers.KafkaAvroDeserializer
+#hoodie.streamer.ingestion.targetBasePath=s3a://warehouse/default_employee_table2/
+
+hoodie.streamer.source.kafka.topic=fulfillment.public.employee_table2
+hoodie.streamer.schemaprovider.registry.url=http://kafka-schema-registry:8081/subjects/fulfillment.public.employee_table2-value/versions/latest
+hoodie.streamer.source.dfs.root=s3a://warehouse/default_employee_table2/
+```
+
+`vi /opt/hudi-streamer-conf/multi-table-stream-conf/hudi-multi-table-stream-conf.properties`
+
+```properties
+# Kafka Properties
+bootstrap.servers=kafka:29092
+auto.offset.reset=earliest
+schema.registry.url=http://kafka-schema-registry:8081
+
+# Hudi Streamer Properties
+hoodie.streamer.schemaprovider.registry.baseUrl=http://kafka-schema-registry:8081/subjects/
+hoodie.streamer.schemaprovider.registry.sourceUrlSuffix=-value/versions/latest
+hoodie.streamer.schemaprovider.registry.targetUrlSuffix=-value/versions/latest
+
+#hoodie.streamer.schemaprovider.registry.url=http://kafka-schema-registry:8081/subjects/random-value/versions/latest
+#hoodie.streamer.schemaprovider.registry.targetUrl=http://kafka-schema-registry:8081/subjects/random-value/versions/latest
+
+hoodie.streamer.ingestion.tablesToBeIngested=default.employee_table1,default.employee_table2
+#hoodie.streamer.ingestion.default.employee_table1.configFile=file:///opt/hudi-streamer-conf/multi-table-conf/table1_config.properties
+#hoodie.streamer.ingestion.default.employee_table2.configFile=file:///opt/hudi-streamer-conf/multi-table-conf/table2_config.properties
+
+# Hudi Writer Properties
+hoodie.datasource.write.keygenerator.class=org.apache.hudi.keygen.ComplexKeyGenerator
+hoodie.datasource.write.drop.partition.columns=false
+```
+
+`vi /opt/hudi-streamer-conf/spark-conf/spark-conf.properties`
+
+```properties
+spark.serializer=org.apache.spark.serializer.KryoSerializer
+spark.sql.catalog.spark_catalog=org.apache.spark.sql.hudi.catalog.HoodieCatalog
+spark.sql.extensions=org.apache.spark.sql.hudi.HoodieSparkSessionExtension
+spark.kryo.registrator=org.apache.spark.HoodieSparkKryoRegistrar
+spark.sql.hive.convertMetastoreParquet=false
+spark.driver.memory=2g
+spark.executor.memory=2g
+```
+
+```sh
+export HUDI_UTILITIES_JAR=$(ls $HUDI_HOME/packaging/hudi-utilities-bundle/target/hudi-utilities-bundle*.jar)
+```
+
+```sh
+spark-submit \
+  --properties-file /opt/hudi-streamer-conf/spark-conf/spark-conf.properties \
+  --class org.apache.hudi.utilities.streamer.HoodieMultiTableStreamer $HUDI_UTILITIES_JAR \
+  --props file:///opt/hudi-streamer-conf/multi-table-stream-conf/hudi-multi-table-stream-conf.properties \
+  --config-folder file:///opt/hudi-streamer-conf/multi-table-conf \
+  --schemaprovider-class org.apache.hudi.utilities.schema.SchemaRegistryProvider \
+  --source-class org.apache.hudi.utilities.sources.debezium.PostgresDebeziumSource \
+  --payload-class org.apache.hudi.common.model.debezium.PostgresDebeziumAvroPayload \
+  --base-path-prefix s3a://warehouse/multi-table/ \
+  --source-ordering-field _event_lsn \
+  --table-type COPY_ON_WRITE \
+  --enable-sync \
+  --op UPSERT \
+  --source-limit 4000000 \
+  --min-sync-interval-seconds 60
+```
