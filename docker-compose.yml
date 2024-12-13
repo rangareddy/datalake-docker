@@ -164,7 +164,7 @@ services:
     ports:
       - "8083:8083"
     volumes:
-      - ./debezium_connectors:/opt/data/connector_configs
+      - ./debezium_configs:/opt/data/connector_configs
     healthcheck:
       test: nc -z localhost 8083 || exit 1
       start_period: 20s
@@ -315,7 +315,6 @@ services:
       - ./data/spark-events:/tmp/spark-events
       - ./logs/spark-master:/opt/bitnami/spark/logs
       - ./hudi_streamer:/opt/hudi_streamer
-      - ./hudi_streamer/src/test/resources/streamer-config/dfs-source.properties:/opt/bitnami/spark/src/test/resources/streamer-config/dfs-source.properties
     healthcheck:
       test: bash -c "exec 6<> /dev/tcp/localhost/8080"
       start_period: 20s

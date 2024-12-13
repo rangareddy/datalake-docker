@@ -274,12 +274,11 @@ curl -X POST \
   -H "Accept:application/json" \
   -H "Content-Type:application/json" \
   localhost:8083/connectors/ \
-  -d @/opt/data/connectors/register_multiple_employees_pg_connector.json
+  -d @/opt/data/connector_configs/multi_table_streamer_connector/register_multiple_employees_pg_connector.json
 ```
 
 ```sh
 export HUDI_UTILITIES_JAR=$(ls $HUDI_HOME/packaging/hudi-utilities-bundle/target/hudi-utilities-bundle*.jar)
-#export HUDI_UTILITIES_JAR=$(ls $HUDI_HOME/packaging/hudi-utilities-slim-bundle/target/hudi-utilities-slim-bundle*.jar)
 ```
 
 ```sh
@@ -300,4 +299,3 @@ spark-submit \
   --source-limit 4000000 \
   --min-sync-interval-seconds 60
 ```
-
