@@ -1,5 +1,5 @@
 {
-  "name": "inventory_employees_postgres_connector",
+  "name": "employees_pg_connector",
   "config": {
     "connector.class": "io.debezium.connector.postgresql.PostgresConnector",
     "plugin.name": "pgoutput",
@@ -9,9 +9,10 @@
     "database.user": "postgres",
     "database.password": "postgres",
     "database.dbname": "postgres",
-    "topic.prefix": "fulfillment",
+    "topic.prefix": "cdc",
     "database.server.name": "postgres",
-    "schema.include.list" : "inventory",
+    "schema.include.list" : "public",
+    "table.include.list" : "public.employees",
     "publication.name" : "dbz_publication",
     "publication.autocreate.mode": "filtered",
     "tombstones.on.delete": "false",

@@ -235,7 +235,6 @@ services:
     volumes:
       - ./db_scripts/postgres/db_init.sql:/docker-entrypoint-initdb.d/1_db_init.sql
       - ./db_scripts/postgres/employees.sql:/docker-entrypoint-initdb.d/2_employees.sql
-      - ./db_scripts/postgres/multi_table.sql:/docker-entrypoint-initdb.d/3_multi_table.sql
       - ./data/postgres:/var/lib/postgresql/data
     command: ["postgres", "-c", "wal_level=logical"]
     healthcheck:
@@ -316,6 +315,7 @@ services:
       - ./data/spark-events:/tmp/spark-events
       - ./logs/spark-master:/opt/bitnami/spark/logs
       - ./hudi_streamer:/opt/hudi_streamer
+      - ./hudi_streamer/src/test/resources/streamer-config/dfs-source.properties:/opt/bitnami/spark/src/test/resources/streamer-config/dfs-source.properties
     healthcheck:
       test: bash -c "exec 6<> /dev/tcp/localhost/8080"
       start_period: 20s

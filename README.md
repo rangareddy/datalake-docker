@@ -422,6 +422,8 @@ spark-submit \
 
 ```sh
 spark-submit \
+  --conf spark.serializer=org.apache.spark.serializer.KryoSerializer \
+  --conf spark.sql.hive.convertMetastoreParquet=false \
   --class org.apache.hudi.utilities.streamer.HoodieMultiTableStreamer $HUDI_UTILITIES_JAR \
   --props file:///opt/hudi_streamer/hudi_multi_table_stream.properties \
   --config-folder file:///opt/hudi_streamer/ \
