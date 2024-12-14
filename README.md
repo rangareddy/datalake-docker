@@ -278,14 +278,16 @@ curl -X POST \
 ```
 
 ```sh
-export HUDI_UTILITIES_JAR=$(ls $HUDI_HOME/packaging/hudi-utilities-bundle/target/hudi-utilities-bundle*.jar)
+export HUDI_SPARK_BUNDLE_JAR=$(ls $HUDI_HOME/packaging/hudi-spark-bundle/target/hudi-spark*-bundle_*.jar)
+export HUDI_UTILITIES_SLIM_JAR=$(ls $HUDI_HOME/packaging/hudi-utilities-slim-bundle/target/hudi-utilities-slim-bundle*.jar)
 ```
 
 ```sh
 spark-submit \
+  --jars $HUDI_SPARK_BUNDLE_JAR \
   --conf spark.serializer=org.apache.spark.serializer.KryoSerializer \
   --conf spark.sql.hive.convertMetastoreParquet=false \
-  --class org.apache.hudi.utilities.streamer.HoodieMultiTableStreamer $HUDI_UTILITIES_JAR \
+  --class org.apache.hudi.utilities.streamer.HoodieMultiTableStreamer $HUDI_UTILITIES_SLIM_JAR \
   --props file:///opt/hudi_streamer/hudi_multi_table_stream.properties \
   --config-folder file:///opt/hudi_streamer/ \
   --schemaprovider-class org.apache.hudi.utilities.schema.SchemaRegistryProvider \
