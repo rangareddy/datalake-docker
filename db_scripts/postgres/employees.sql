@@ -46,5 +46,6 @@ INSERT INTO public.employee2 (id, name, age, salary, department) VALUES (4, 'Raj
 
 SELECT * FROM public.employee2;
 
-CREATE PUBLICATION dbz_publication FOR ALL TABLES WITH (publish = 'insert, update, delete, truncate');
-ALTER PUBLICATION dbz_publication OWNER TO "postgres";
+--CREATE PUBLICATION dbz_publication FOR ALL TABLES WITH (publish = 'insert, update, delete, truncate');
+--ALTER PUBLICATION dbz_publication OWNER TO "postgres";
+

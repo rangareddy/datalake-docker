@@ -235,6 +235,7 @@ services:
     volumes:
       - ./db_scripts/postgres/db_init.sql:/docker-entrypoint-initdb.d/1_db_init.sql
       - ./db_scripts/postgres/employees.sql:/docker-entrypoint-initdb.d/2_employees.sql
+      - ./db_scripts/postgres/multi_table_data.sql:/docker-entrypoint-initdb.d/3_data.sql
       - ./data/postgres:/var/lib/postgresql/data
     command: ["postgres", "-c", "wal_level=logical"]
     healthcheck:
@@ -243,6 +244,24 @@ services:
       interval: 30s
       timeout: 30s
       retries: 5
+    networks:
+      - datalake
+
+  pgadmin:
+    image: dpage/pgadmin4:${PGADMIN4_VERSION:-8.14}
+    container_name: pgadmin
+    hostname: pgadmin
+    restart: unless-stopped
+    environment: 
+      - PGADMIN_DEFAULT_EMAIL=${PGADMIN_DEFAULT_EMAIL:-admin@admin.com}
+      - PGADMIN_DEFAULT_PASSWORD=${PGADMIN_DEFAULT_PASSWORD:-password}
+    ports:
+      - 5050:80
+    volumes:
+      - ./data/pgadmin:/var/lib/pgadmin
+    depends_on:
+      postgres:
+        condition: service_healthy
     networks:
       - datalake
 

@@ -274,7 +274,7 @@ curl -X POST \
   -H "Accept:application/json" \
   -H "Content-Type:application/json" \
   localhost:8083/connectors/ \
-  -d @/opt/data/connector_configs/multi_table_streamer_connector/register_multiple_employees_pg_connector.json
+  -d @/opt/data/connector_configs/multi_table_streamer_connector/register_customer_order_table_pg_connector.json
 ```
 
 ```sh
@@ -290,14 +290,37 @@ spark-submit \
   --class org.apache.hudi.utilities.streamer.HoodieMultiTableStreamer $HUDI_UTILITIES_SLIM_JAR \
   --props file:///opt/hudi_streamer/hudi_multi_table_stream.properties \
   --config-folder file:///opt/hudi_streamer/ \
-  --schemaprovider-class org.apache.hudi.utilities.schema.SchemaRegistryProvider \
   --source-class org.apache.hudi.utilities.sources.debezium.PostgresDebeziumSource \
   --payload-class org.apache.hudi.common.model.debezium.PostgresDebeziumAvroPayload \
   --base-path-prefix s3a://warehouse/multi-table/ \
-  --source-ordering-field jod \
+  --source-ordering-field _event_origin_ts_ms \
   --table-type COPY_ON_WRITE \
   --enable-sync \
   --op UPSERT \
   --source-limit 4000000 \
   --min-sync-interval-seconds 60
+```
+
+```sh
+export HUDI_SPARK_BUNDLE_JAR=$(ls $HUDI_HOME/packaging/hudi-spark-bundle/target/hudi-spark*-bundle_*.jar)
+export HUDI_UTILITIES_SLIM_JAR=$(ls $HUDI_HOME/packaging/hudi-utilities-slim-bundle/target/hudi-utilities-slim-bundle*.jar)
+
+spark-submit \
+  --jars $HUDI_SPARK_BUNDLE_JAR \
+  --conf spark.serializer=org.apache.spark.serializer.KryoSerializer \
+  --conf spark.sql.hive.convertMetastoreParquet=false \
+  --class org.apache.hudi.utilities.streamer.HoodieMultiTableStreamer $HUDI_UTILITIES_SLIM_JAR \
+  --props file:///opt/hudi_streamer/hudi_multi_table_stream.properties \
+  --config-folder file:///opt/hudi_streamer/ \
+  --source-class org.apache.hudi.utilities.sources.debezium.PostgresDebeziumSource \
+  --payload-class org.apache.hudi.common.model.debezium.PostgresDebeziumAvroPayload \
+  --base-path-prefix s3a://warehouse/multi-table/ \
+  --target-table customers,orders \
+  --source-ordering-field _event_origin_ts_ms \
+  --table-type COPY_ON_WRITE \
+  --enable-sync \
+  --op UPSERT \
+  --source-limit 4000000 \
+  --min-sync-interval-seconds 60 \
+  --continuous
 ```
