@@ -26,20 +26,20 @@ SELECT * FROM customers;
 CREATE TABLE IF NOT EXISTS orders (
     order_id SERIAL PRIMARY KEY,
     customer_id INT REFERENCES customers(customer_id),
-    order_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    order_date DATE DEFAULT CURRENT_TIMESTAMP,
     total_amount DECIMAL(10, 2) NOT NULL,
     status VARCHAR(20) NOT NULL
 );
 
 -- Insert sample data into the "orders" table
 INSERT INTO orders (customer_id, order_date, total_amount, status) VALUES
-    (1, '2023-10-01 10:00:00', 150.75, 'Completed'),
-    (1, '2023-10-05 14:30:00', 200.00, 'Pending'),
-    (2, '2023-10-02 09:15:00', 99.99, 'Completed'),
-    (2, '2023-10-03 11:45:00', 250.50, 'Shipped'),
-    (3, '2023-10-04 16:00:00', 300.00, 'Completed'),
-    (1, '2023-10-06 12:00:00', 120.00, 'Pending'),
-    (3, '2023-10-07 08:30:00', 450.00, 'Shipped');
+    (1, '2024-10-01', 150.75, 'Completed'),
+    (1, '2024-10-02', 200.00, 'Pending'),
+    (2, '2024-10-02', 99.99, 'Completed'),
+    (2, '2024-10-03', 250.50, 'Shipped'),
+    (3, '2024-10-03', 300.00, 'Completed'),
+    (1, '2024-10-01', 120.00, 'Pending'),
+    (3, '2024-10-03', 450.00, 'Shipped');
 
 -- Select the orders data
 SELECT * FROM orders;

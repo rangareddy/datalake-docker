@@ -1196,3 +1196,35 @@ curl -i -X POST -H "Accept:application/json" -H  "Content-Type:application/json"
 ```sh
 curl -X DELETE localhost:8083/connectors/inventory_employees_postgres_connector
 ```
+
+```yaml
+  graphite:
+    image: graphiteapp/graphite-statsd
+    container_name: graphite
+    hostname: graphite
+    restart: unless-stopped
+    ports:
+      - "2003-2004:2003-2004"
+      - "2023-2024:2023-2024"
+      - "5555:80"
+    networks:
+      - datalake
+
+  pgadmin:
+    image: dpage/pgadmin4:${PGADMIN4_VERSION:-8.14}
+    container_name: pgadmin
+    hostname: pgadmin
+    restart: unless-stopped
+    environment: 
+      - PGADMIN_DEFAULT_EMAIL=${PGADMIN_DEFAULT_EMAIL:-admin@admin.com}
+      - PGADMIN_DEFAULT_PASSWORD=${PGADMIN_DEFAULT_PASSWORD:-password}
+    ports:
+      - 5050:80
+    volumes:
+      - ./data/pgadmin:/var/lib/pgadmin
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - datalake
+```

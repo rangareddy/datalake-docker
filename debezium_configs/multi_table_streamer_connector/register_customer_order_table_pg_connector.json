@@ -10,7 +10,7 @@
     "database.user": "postgres",
     "database.password": "postgres",
     "database.dbname": "cdc_db",
-    "database.include.list": "cdc_db",
+    "schema.include.list" : "public",
     "topic.prefix": "cdc",
     "tombstones.on.delete": "false"
   }

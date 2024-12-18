@@ -270,11 +270,19 @@ employeesDF.show(truncate=false)
 ## Hudi Multi Table Streamer Example
 
 ```sh
-curl -X POST \
+docker exec -it kafka-connect bash
+```
+
+```sh
+curl -s -X POST \
   -H "Accept:application/json" \
   -H "Content-Type:application/json" \
   localhost:8083/connectors/ \
-  -d @/opt/data/connector_configs/multi_table_streamer_connector/register_customer_order_table_pg_connector.json
+  -d @/opt/data/connector_configs/multi_table_streamer_connector/register_customer_order_table_pg_connector.json | jq
+```
+
+```sh
+docker exec -it spark-master bash
 ```
 
 ```sh
@@ -299,6 +307,23 @@ spark-submit \
   --op UPSERT \
   --source-limit 4000000 \
   --min-sync-interval-seconds 60
+```
+
+```sh
+spark-sql \
+  --jars $HUDI_SPARK_BUNDLE_JAR
+```
+
+```sh
+docker exec -it trino bash
+```
+
+```sh
+trino> show schemas;
+trino> use cdc_test_db;
+trino:cdc_test_db> show tables;
+trino:cdc_test_db> select * from customers;
+trino:cdc_test_db> select * from orders;
 ```
 
 ```sh
