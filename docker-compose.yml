@@ -13,9 +13,9 @@ services:
       ZOOKEEPER_SYNC_LIMIT: 2
     ports:
       - "2181:2181"
-    #volumes:
-    #  - ./data/zookeeper:/var/lib/zookeeper/data
-    #  - ./logs/zookeeper:/var/lib/zookeeper/log
+    volumes:
+      - ./logs/zookeeper:/var/lib/zookeeper/log
+    # - ./data/zookeeper:/var/lib/zookeeper/data
     healthcheck:
       test: nc -z localhost 2181 || exit 1
       start_period: 20s
@@ -175,7 +175,7 @@ services:
       - datalake
 
   kafka-cat:
-    image: rangareddy1988/ranga-kafka-cat:${CONFLUENT_KAFKACAT_VERSION:-7.1.15}
+    image: rangareddy1988/ranga-kafka-cat:${CONFLUENT_KAFKACAT_VERSION:-latest}
     platform: ${PLATFORM:-linux/amd64}
     container_name: kafka-cat
     hostname: kafka-cat
@@ -187,7 +187,7 @@ services:
       - datalake
 
   kafka-ui:
-    image: provectuslabs/kafka-ui:latest
+    image: provectuslabs/kafka-ui:${KAFKA_UI_VERSION:-latest}
     platform: ${PLATFORM:-linux/amd64}
     container_name: kafka-ui
     hostname: kafka-ui
@@ -216,33 +216,6 @@ services:
       start_period: 20s
       interval: 30s
       timeout: 10s
-      retries: 5
-    networks:
-      - datalake
-
-  postgres:
-    image: postgres:${POSTGRES_VERSION:-16.4}
-    platform: ${PLATFORM:-linux/amd64}
-    container_name: postgres
-    hostname: postgres
-    restart: unless-stopped
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
-      POSTGRES_DB: ${POSTGRES_DB:-postgres}
-    ports:
-      - "5432:5432"
-    volumes:
-      - ./db_scripts/postgres/db_init.sql:/docker-entrypoint-initdb.d/1_db_init.sql
-      - ./db_scripts/postgres/employees.sql:/docker-entrypoint-initdb.d/2_employees.sql
-      - ./db_scripts/postgres/multi_table_data.sql:/docker-entrypoint-initdb.d/3_data.sql
-      - ./data/postgres:/var/lib/postgresql/data
-    command: ["postgres", "-c", "wal_level=logical"]
-    healthcheck:
-      test: ["CMD", "psql", "-U", "postgres", "-c", "SELECT 1"]
-      start_period: 20s
-      interval: 30s
-      timeout: 30s
       retries: 5
     networks:
       - datalake
@@ -353,6 +326,33 @@ services:
     networks:
       - datalake
 
+  postgres:
+    image: postgres:${POSTGRES_VERSION:-16.4}
+    platform: ${PLATFORM:-linux/amd64}
+    container_name: postgres
+    hostname: postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-postgres}
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./db_scripts/postgres/db_init.sql:/docker-entrypoint-initdb.d/1_db_init.sql
+      - ./db_scripts/postgres/employees.sql:/docker-entrypoint-initdb.d/2_employees.sql
+      - ./db_scripts/postgres/multi_table_data.sql:/docker-entrypoint-initdb.d/3_data.sql
+      - ./data/postgres:/var/lib/postgresql/data
+    command: ["postgres", "-c", "wal_level=logical"]
+    healthcheck:
+      test: ["CMD", "psql", "-U", "postgres", "-c", "SELECT 1"]
+      start_period: 20s
+      interval: 30s
+      timeout: 30s
+      retries: 5
+    networks:
+      - datalake
+      
   mysql:
     image: ubuntu/mysql:${MYSQL_VERSION:-8.0-20.04_edge}
     platform: ${PLATFORM:-linux/amd64}
@@ -469,8 +469,8 @@ services:
       mysql:
         condition: service_healthy
     environment:
-      - admin_user: "cbadmin"
-      - admin_password: "Cbadmin123"
+      admin_user: "cbadmin"
+      admin_password: "Cbadmin123"
     ports:
       - "8978:8978"
     volumes: 

@@ -57,7 +57,7 @@ build_docker_image() {
     local image_name="$3"
     local version_arg=$(echo ${image_name}_VERSION | tr '[:lower:]' '[:upper:]')
     local image_version_str="${version_arg//-/_}"    
-    if docker build --build-arg "$image_version_str=$image_version" --platform linux/"$ARCH" -f "$dockerfile" . -t "$DOCKER_HUB_USERNAME/ranga-$image_name:$image_version"; then
+    if docker build --build-arg "$image_version_str=$image_version" --platform linux/"$ARCH" -f "$dockerfile" . -t "$DOCKER_HUB_USERNAME/ranga-$image_name:$image_version" -t "$DOCKER_HUB_USERNAME/ranga-$image_name:latest"; then
         echo "Successfully built $image_name:$image_version"
     else
         echo "Failed to build $image_name:$image_version"
@@ -84,10 +84,10 @@ sh download_and_build_hudi.sh
 download_hadoop_aws_jars
 
 # Build Docker images
-build_docker_image "$HIVE_VERSION" "./Dockerfile.hive" "hive"
-build_docker_image "$SPARK_VERSION" "./Dockerfile.spark" "spark"
-build_docker_image "$KAFKA_CONNECT_VERSION" "./Dockerfile.kafka_connect" "kafka-connect"
-build_docker_image "$CONFLUENT_KAFKACAT_VERSION" "./Dockerfile.kafka_cat" "kafka-cat"
+build_docker_image "$HIVE_VERSION" "./docker/Dockerfile.hive" "hive"
+build_docker_image "$SPARK_VERSION" "./docker/Dockerfile.spark" "spark"
+build_docker_image "$KAFKA_CONNECT_VERSION" "./docker/Dockerfile.kafka_connect" "kafka-connect"
+build_docker_image "$CONFLUENT_KAFKACAT_VERSION" "./docker/Dockerfile.kafka_cat" "kafka-cat"
 
 # Prune unused Docker images
 if docker image prune -f; then

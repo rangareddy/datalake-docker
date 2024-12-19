@@ -278,7 +278,7 @@ curl -s -X POST \
   -H "Accept:application/json" \
   -H "Content-Type:application/json" \
   localhost:8083/connectors/ \
-  -d @/opt/data/connector_configs/multi_table_streamer_connector/register_customer_order_table_pg_connector.json | jq
+  -d @/opt/data/connector_configs/multi_table_streamer_connector/register_customers_orders_pg_connector.json | jq
 ```
 
 ```sh
