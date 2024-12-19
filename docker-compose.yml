@@ -259,7 +259,7 @@ services:
       SERVICE_NAME: hiveserver2
       IS_RESUME: "true"
       HIVE_SERVER2_THRIFT_PORT: 10000
-      SERVICE_OPTS: '-Xmx1G -Dhive.metastore.uris=thrift://hive-metastore:9083'
+      SERVICE_OPTS: "-Xmx1G -Dhive.metastore.uris=thrift://hive-metastore:9083"
     ports:
       - "10000:10000"
       - "10002:10002"
@@ -352,7 +352,7 @@ services:
       retries: 5
     networks:
       - datalake
-      
+
   mysql:
     image: ubuntu/mysql:${MYSQL_VERSION:-8.0-20.04_edge}
     platform: ${PLATFORM:-linux/amd64}
@@ -450,7 +450,7 @@ services:
     volumes:
       - ./conf/trino/catalog:/etc/trino/catalog
     healthcheck:
-      test: ['CMD', 'curl', '-f', 'http://localhost:8080/v1/info']
+      test: ["CMD", "curl", "-f", "http://localhost:8080/v1/info"]
       start_period: 90s
       interval: 30s
       timeout: 30s
@@ -473,7 +473,7 @@ services:
       admin_password: "Cbadmin123"
     ports:
       - "8978:8978"
-    volumes: 
+    volumes:
       - ./data/cloudbeaver:/opt/cloudbeaver/workspace
     healthcheck:
       test: nc -z localhost 8978 || exit 1

@@ -1,5 +1,6 @@
 #!/bin/bash
-set -euo pipefail  # Enable strict error handling
+
+set -euo pipefail # Enable strict error handling
 
 docker-compose down
 

@@ -1,3 +1,5 @@
+#!/bin/bash
+
 KAFKA_TOPIC_NAME=hudi-test-topic
 STOCKS_SCHEMA_FILE=stocks.avsc
 KAFKA_SCHEMA_REGISTRY_PORT=8081

@@ -5,7 +5,7 @@ LABEL maintainer="Ranga Reddy"
 USER root
 
 RUN set -ex; \
-    yum update -y && yum install -y curl wget tar vim git jq;
+	yum update -y && yum install -y curl wget tar vim git jq;
 
 ARG CONFLUENT_HUB_COMPONENTS="/usr/share/confluent-hub-components"
 ARG CONNECTORS_PATH="/opt/connectors"
@@ -23,14 +23,14 @@ ENV CONNECT_PLUGIN_PATH="/usr/share/java,$CONFLUENT_HUB_COMPONENTS,$CONNECTORS_P
 
 RUN mkdir -p $CONNECTORS_PATH && mkdir -p $DATA_PATH && mkdir -p $HUDI_KAFKA_CONNECTOR_PATH && \
 	confluent-hub install --no-prompt confluentinc/kafka-connect-hdfs2-source:latest && \
-    confluent-hub install --no-prompt confluentinc/kafka-connect-hdfs3:latest && \
-    confluent-hub install --no-prompt confluentinc/kafka-connect-hdfs3-source:latest && \
-    confluent-hub install --no-prompt confluentinc/kafka-connect-s3:latest && \
-    confluent-hub install --no-prompt confluentinc/kafka-connect-s3-source:latest && \
-    confluent-hub install --no-prompt confluentinc/kafka-connect-jdbc:latest && \
-    confluent-hub install --no-prompt debezium/debezium-connector-mysql:latest && \
-    confluent-hub install --no-prompt debezium/debezium-connector-postgresql:latest && \
-    cp -r /usr/share/confluent-hub-components/confluentinc-kafka-connect-hdfs3/lib $HUDI_KAFKA_CONNECTOR_PATH/lib
+	confluent-hub install --no-prompt confluentinc/kafka-connect-hdfs3:latest && \
+	confluent-hub install --no-prompt confluentinc/kafka-connect-hdfs3-source:latest && \
+	confluent-hub install --no-prompt confluentinc/kafka-connect-s3:latest && \
+	confluent-hub install --no-prompt confluentinc/kafka-connect-s3-source:latest && \
+	confluent-hub install --no-prompt confluentinc/kafka-connect-jdbc:latest && \
+	confluent-hub install --no-prompt debezium/debezium-connector-mysql:latest && \
+	confluent-hub install --no-prompt debezium/debezium-connector-postgresql:latest && \
+	cp -r /usr/share/confluent-hub-components/confluentinc-kafka-connect-hdfs3/lib $HUDI_KAFKA_CONNECTOR_PATH/lib
 
 COPY hadoop-s3-jars/* $HUDI_KAFKA_CONNECTOR_PATH/
 COPY hudi_0_15_0/packaging/hudi-kafka-connect-bundle/target/hudi-kafka-connect-bundle-*.jar $HUDI_KAFKA_CONNECTOR_PATH/

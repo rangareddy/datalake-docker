@@ -1,5 +1,5 @@
 #!/bin/bash
-set -euo pipefail  # Enable strict error handling
+set -euo pipefail # Enable strict error handling
 
 # Define constants
 CURR_DIR=$(pwd)
@@ -19,7 +19,7 @@ clone_hudi_repo() {
 
 # Function to checkout the specified Hudi version
 checkout_hudi_version() {
-	local hudi_version="$1"
+    local hudi_version="$1"
     local HUDI_TAG_NAME=$(git tag | grep "$hudi_version" | sort -r | head -n 1)
     if [ -z "$HUDI_TAG_NAME" ]; then
         echo "Error: Hudi version $hudi_version not found."
@@ -31,9 +31,9 @@ checkout_hudi_version() {
 
 # Function to build Apache Hudi
 build_hudi() {
-	local hudi_version="$1"
+    local hudi_version="$1"
     cd "$HUDI_DIR"
-	checkout_hudi_version "$hudi_version"
+    checkout_hudi_version "$hudi_version"
     echo "Building Apache Hudi..."
     mvn clean package -DskipTests -Dspark"${SPARK_MAJOR_VERSION}" -Dscala-${SCALA_VERSION}
     echo "Build completed successfully."
@@ -63,7 +63,7 @@ copy_target_jar_file_to_target_dir() {
     for subdir in "$current_dir"/*; do
         if [ -d "$subdir" ]; then
             local my_current_dir=$(basename "$subdir")
-            copy_target_jar_file_to_target_dir "$subdir" "$output_dir/$my_current_dir"  # Recursive call
+            copy_target_jar_file_to_target_dir "$subdir" "$output_dir/$my_current_dir" # Recursive call
         fi
     done
 }
@@ -75,7 +75,7 @@ for HUDI_VERSION in "${HUDI_VERSIONS[@]}"; do
     HUDI_TARGET_VERSION=$(echo "$HUDI_VERSION" | sed 's/\./_/g')
     HUDI_TARGET_DIR="${HUDI_DIR}_${HUDI_TARGET_VERSION}"
     if [ ! -d "$HUDI_TARGET_DIR" ]; then
-    	build_hudi "$HUDI_VERSION"
-    	copy_target_jar_file_to_target_dir "$HUDI_DIR" "$HUDI_TARGET_DIR"
+        build_hudi "$HUDI_VERSION"
+        copy_target_jar_file_to_target_dir "$HUDI_DIR" "$HUDI_TARGET_DIR"
     fi
 done

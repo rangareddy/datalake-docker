@@ -5,7 +5,7 @@ LABEL maintainer="Ranga Reddy"
 USER root
 
 RUN set -ex; \
-    yum update -y && yum install -y curl wget vim git jq;
+	yum update -y && yum install -y curl wget vim git jq;
 
 RUN mkdir -p /opt/data && \
 	git clone https://github.com/rangareddy/hudi-kafka-connect-demo.git /opt/data/hudi-kafka-connect-demo && \
