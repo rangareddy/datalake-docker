@@ -2,6 +2,7 @@
 set -e
 
 # Define constants
+CURRENT_DIR=$(pwd)
 export HIVE_VERSION=${HIVE_VERSION:-4.0.0}
 export SPARK_VERSION=${SPARK_VERSION:-3.5.3}
 export KAFKA_CONNECT_VERSION=${KAFKA_CONNECT_VERSION:-7.4.7}
@@ -10,8 +11,8 @@ export HUDI_VERSIONS=("0.15.0" "1.0.0")
 export SPARK_MAJOR_VERSION="${SPARK_VERSION%.*}"
 export SCALA_VERSION=${SCALA_VERSION:-2.12}
 export DOCKER_HUB_USERNAME="rangareddy1988"
-export CURRENT_DIR=$(pwd)
 export HADOOP_AWS_JARS_PATH="$CURRENT_DIR/hadoop-s3-jars"
+export TRINO_VERSION=${TRINO_VERSION:-460}
 
 # Function to check Docker installation
 check_docker_installed() {
@@ -55,7 +56,7 @@ build_docker_image() {
     local image_version="$1"
     local dockerfile="$2"
     local image_name="$3"
-    local version_arg=$(echo ${image_name}_VERSION | tr '[:lower:]' '[:upper:]')
+    version_arg=$(echo ${image_name}_VERSION | tr '[:lower:]' '[:upper:]')
     local image_version_str="${version_arg//-/_}"    
     if docker build --build-arg "$image_version_str=$image_version" --platform linux/"$ARCH" -f "$dockerfile" . -t "$DOCKER_HUB_USERNAME/ranga-$image_name:$image_version" -t "$DOCKER_HUB_USERNAME/ranga-$image_name:latest"; then
         echo "Successfully built $image_name:$image_version"
@@ -67,11 +68,11 @@ build_docker_image() {
 
 download_hadoop_aws_jars() {
     if [ ! -d "$HADOOP_AWS_JARS_PATH" ]; then
-        mkdir -p $HADOOP_AWS_JARS_PATH
+        mkdir -p "$HADOOP_AWS_JARS_PATH"
         curl -s https://repo1.maven.org/maven2/com/amazonaws/aws-java-sdk-bundle/1.12.262/aws-java-sdk-bundle-1.12.262.jar \
-        -o $HADOOP_AWS_JARS_PATH/aws-java-sdk-bundle-1.12.262.jar && \
+        -o "$HADOOP_AWS_JARS_PATH/aws-java-sdk-bundle-1.12.262.jar" && \
         curl -s https://repo1.maven.org/maven2/org/apache/hadoop/hadoop-aws/3.3.4/hadoop-aws-3.3.4.jar \
-        -o $HADOOP_AWS_JARS_PATH/hadoop-aws-3.3.4.jar
+        -o "$HADOOP_AWS_JARS_PATH/hadoop-aws-3.3.4.jar"
     fi 
 }
 
@@ -80,14 +81,14 @@ check_docker_running
 ARCH=$(get_docker_architecture)
 
 sh download_and_build_hudi.sh
-
 download_hadoop_aws_jars
 
 # Build Docker images
-build_docker_image "$HIVE_VERSION" "./docker/Dockerfile.hive" "hive"
-build_docker_image "$SPARK_VERSION" "./docker/Dockerfile.spark" "spark"
-build_docker_image "$KAFKA_CONNECT_VERSION" "./docker/Dockerfile.kafka_connect" "kafka-connect"
-build_docker_image "$CONFLUENT_KAFKACAT_VERSION" "./docker/Dockerfile.kafka_cat" "kafka-cat"
+build_docker_image "$HIVE_VERSION" "./Dockerfile.hive" "hive"
+build_docker_image "$SPARK_VERSION" "./Dockerfile.spark" "spark"
+build_docker_image "$KAFKA_CONNECT_VERSION" "./Dockerfile.kafka_connect" "kafka-connect"
+build_docker_image "$CONFLUENT_KAFKACAT_VERSION" "./Dockerfile.kafka_cat" "kafka-cat"
+build_docker_image "$TRINO_VERSION" "./Dockerfile.trino" "trino"
 
 # Prune unused Docker images
 if docker image prune -f; then

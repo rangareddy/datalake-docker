@@ -5,7 +5,7 @@ LABEL maintainer="Ranga Reddy"
 USER root
 
 RUN apt-get update && \
-	apt-get install curl -y telnet && \
+	apt-get install curl -y telnet vim jq && \
 	mkdir -p /home/hive/.beeline && \
 	chown hive /home/hive/.beeline
 

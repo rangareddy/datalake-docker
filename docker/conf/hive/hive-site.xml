@@ -20,14 +20,6 @@
         <value>false</value>
     </property>
     <property>
-        <name>hive.exec.scratchdir</name>
-        <value>/opt/hive/scratch_dir</value>
-    </property>
-    <property>
-        <name>hive.user.install.directory</name>
-        <value>/opt/hive/install_dir</value>
-    </property>
-    <property>
         <name>tez.runtime.optimize.local.fetch</name>
         <value>true</value>
     </property>
@@ -76,8 +68,20 @@
         <value>false</value>
     </property>
     <property>
+        <name>fs.defaultFS</name>
+        <value>s3a://minio:9000</value>
+    </property>
+    <property>
         <name>metastore.warehouse.dir</name>
         <value>s3a://warehouse/</value>
+    </property>
+    <property>
+        <name>hive.exec.scratchdir</name>
+        <value>s3a://warehouse/hive/scratch_dir</value>
+    </property>
+    <property>
+        <name>hive.user.install.directory</name>
+        <value>s3a://warehouse/hive/install_dir</value>
     </property>
     <property>
         <name>javax.jdo.option.ConnectionDriverName</name>
@@ -106,10 +110,6 @@
     <property>
         <name>datanucleus.autoCreateTables</name>
         <value>true</value>
-    </property>
-    <property>
-        <name>fs.defaultFS</name>
-        <value>s3a://minio:9000</value>
     </property>
     <property>
         <name>fs.s3a.endpoint</name>

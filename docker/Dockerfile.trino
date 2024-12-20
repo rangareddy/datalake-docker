@@ -1,0 +1,10 @@
+ARG TRINO_VERSION=${TRINO_VERSION:-460}
+FROM trinodb/trino:${TRINO_VERSION}
+
+LABEL maintainer="Ranga Reddy"
+USER root
+
+COPY conf/trino/catalog /etc/trino/catalog
+RUN chmod 755 /etc/trino/catalog
+
+USER trino

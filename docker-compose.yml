@@ -13,9 +13,6 @@ services:
       ZOOKEEPER_SYNC_LIMIT: 2
     ports:
       - "2181:2181"
-    volumes:
-      - ./logs/zookeeper:/var/lib/zookeeper/log
-    # - ./data/zookeeper:/var/lib/zookeeper/data
     healthcheck:
       test: nc -z localhost 2181 || exit 1
       start_period: 20s
@@ -51,8 +48,6 @@ services:
       - "29092:29092"
       - "9092:9092"
       - "9101:9101"
-    #volumes:
-    #  - ./data/kafka:/var/lib/kafka/data
     healthcheck:
       test: nc -z localhost 9092 || exit 1
       start_period: 20s
@@ -95,8 +90,6 @@ services:
       SCHEMA_REGISTRY_DEBUG: "true"
     ports:
       - "8081:8081"
-    volumes:
-      - ./kafka-connectors/configs/:/opt/connector-configs/
     healthcheck:
       test: nc -z localhost 8081 || exit 1
       start_period: 20s
@@ -237,6 +230,8 @@ services:
       VERBOSE: "true"
     ports:
       - "9083:9083"
+    volumes:
+      - ./logs/metastore/:/tmp/hive/
     healthcheck:
       test: bash -c "exec 6<> /dev/tcp/localhost/9083"
       start_period: 30s
@@ -259,7 +254,9 @@ services:
       SERVICE_NAME: hiveserver2
       IS_RESUME: "true"
       HIVE_SERVER2_THRIFT_PORT: 10000
-      SERVICE_OPTS: "-Xmx1G -Dhive.metastore.uris=thrift://hive-metastore:9083"
+      SERVICE_OPTS: "-Dhive.metastore.uris=thrift://hive-metastore:9083"
+    volumes:
+      - ./logs/hiveserver/:/tmp/hive/
     ports:
       - "10000:10000"
       - "10002:10002"
@@ -278,16 +275,14 @@ services:
         condition: service_healthy
     environment:
       - SPARK_MODE=master
-      - SPARK_MASTER_HOST=spark-master
-      - SPARK_MASTER_WEBUI_PORT=8080
       - SPARK_MASTER_PORT=7077
     ports:
       - "8080:8080"
       - "7077:7077"
-      - "14040-14042:4040-4042"
+      - "4040-4042:4040-4042"
     volumes:
-      - ./data/spark-events:/tmp/spark-events
-      - ./logs/spark-master:/opt/bitnami/spark/logs
+      - ./data/spark-events:/opt/spark/spark-events
+      - ./logs/spark-master:/var/log/spark
       - ./hudi_streamer:/opt/hudi_streamer
     healthcheck:
       test: bash -c "exec 6<> /dev/tcp/localhost/8080"
@@ -309,14 +304,14 @@ services:
         condition: service_healthy
     environment:
       - SPARK_MODE=worker
-      - SPARK_MASTER_URL=spark://spark-master:7077
+      - SPARK_MASTER_HOST=spark-master
       - SPARK_WORKER_CORES=2
       - SPARK_WORKER_MEMORY=4G
       - SPARK_WORKER_WEBUI_PORT=8081
     ports:
       - "18081:8081"
     volumes:
-      - ./logs/spark-worker:/opt/bitnami/spark/logs
+      - ./logs/spark-worker:/var/log/spark
     healthcheck:
       test: bash -c "exec 6<> /dev/tcp/localhost/8081"
       start_period: 20s
@@ -435,7 +430,7 @@ services:
       - datalake
 
   trino:
-    image: trinodb/trino:${TRINO_VERSION:-460}
+    image: rangareddy1988/ranga-trino:${TRINO_VERSION:-460}
     platform: ${PLATFORM:-linux/amd64}
     container_name: trino
     hostname: trino
@@ -447,8 +442,6 @@ services:
         condition: service_healthy
     ports:
       - "9084:8080"
-    volumes:
-      - ./conf/trino/catalog:/etc/trino/catalog
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/v1/info"]
       start_period: 90s

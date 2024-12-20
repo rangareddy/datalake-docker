@@ -16,7 +16,9 @@ out/
 # Datalake
 kafka-connectors/plugins/hudi-kafka-connector
 data/
-hudi/
-hudi_0_15_0/
-hudi_1_0_0/
-hadoop-s3-jars
+docker/hudi/
+docker/hudi_0_15_0/
+docker/hudi_1_0_0/
+docker/hadoop-s3-jars
+
+old_files

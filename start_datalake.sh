@@ -4,6 +4,8 @@ set -euo pipefail # Enable strict error handling
 
 docker-compose down
 
-rm -rf data logs
+if [ -d data ]; then
+    rm -rf data logs
+fi
 
 docker-compose up -d
