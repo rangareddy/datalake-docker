@@ -20,5 +20,6 @@ docker/hudi/
 docker/hudi_0_15_0/
 docker/hudi_1_0_0/
 docker/hadoop-s3-jars
+docker/db_connector_jars
 
 old_files

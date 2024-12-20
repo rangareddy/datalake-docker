@@ -1,8 +1,8 @@
 <configuration>
-    <property>
+    <!--<property>
         <name>metastore.thrift.uris</name>
         <value>thrift://0.0.0.0:9083</value>
-    </property>
+    </property>-->
     <property>
         <name>hive.metastore.client.socket.timeout</name>
         <value>300</value>
@@ -67,21 +67,36 @@
         <name>metastore.metastore.event.db.notification.api.auth</name>
         <value>false</value>
     </property>
-    <property>
+    <!--<property>
         <name>fs.defaultFS</name>
         <value>s3a://minio:9000</value>
-    </property>
+    </property>-->
     <property>
         <name>metastore.warehouse.dir</name>
         <value>s3a://warehouse/</value>
     </property>
     <property>
+        <name>hive.querylog.location</name>
+        <value>$HIVE_HOME/iotmp</value>
+        <description>Location of Hive run time structured log file</description>
+    </property>
+    <property>
         <name>hive.exec.scratchdir</name>
-        <value>s3a://warehouse/hive/scratch_dir</value>
+        <value>file:///tmp/hive-${user.name}/scratch_dir</value>
+    </property>
+    <property>
+        <name>hive.downloaded.resources.dir</name>
+        <value>file:///tmp/hive-${user.name}</value>
+        <description>Temporary local directory for added resources in the remote file system.</description>
+    </property>
+    <property>
+        <name>hive.exec.local.scratchdir</name>
+        <value>file:///tmp/hive-${user.name}</value>
+        <description>Local scratch space for Hive jobs</description>
     </property>
     <property>
         <name>hive.user.install.directory</name>
-        <value>s3a://warehouse/hive/install_dir</value>
+        <value>file:///tmp/hive-${user.name}/install_dir</value>
     </property>
     <property>
         <name>javax.jdo.option.ConnectionDriverName</name>

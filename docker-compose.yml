@@ -275,11 +275,11 @@ services:
         condition: service_healthy
     environment:
       - SPARK_MODE=master
-      - SPARK_MASTER_PORT=7077
     ports:
       - "8080:8080"
       - "7077:7077"
       - "4040-4042:4040-4042"
+      - "18080:18080"
     volumes:
       - ./data/spark-events:/opt/spark/spark-events
       - ./logs/spark-master:/var/log/spark

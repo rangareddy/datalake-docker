@@ -55,6 +55,7 @@ start_spark_history_server() {
 
 if [ "$SPARK_MODE" == "master" ]; then
   start_spark_master
+  start_spark_history_server
 elif [ "$SPARK_MODE" == "worker" ]; then
   start_spark_worker
 elif [ "$SPARK_MODE" == "history" ]; then
