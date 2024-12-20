@@ -234,8 +234,8 @@ services:
       - ./logs/metastore/:/tmp/hive/
     healthcheck:
       test: bash -c "exec 6<> /dev/tcp/localhost/9083"
-      start_period: 30s
-      interval: 30s
+      start_period: 50s
+      interval: 40s
       timeout: 30s
       retries: 5
     networks:
@@ -255,6 +255,8 @@ services:
       IS_RESUME: "true"
       HIVE_SERVER2_THRIFT_PORT: 10000
       SERVICE_OPTS: "-Dhive.metastore.uris=thrift://hive-metastore:9083"
+      AWS_ACCESS_KEY: admin
+      AWS_SECRET_ACCESS_KEY: password
     volumes:
       - ./logs/hiveserver/:/tmp/hive/
     ports:

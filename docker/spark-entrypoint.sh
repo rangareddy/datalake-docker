@@ -42,7 +42,7 @@ start_spark_connect() {
 start_spark_history_server() {
   echo "Starting the Spark History Server..."
   export SPARK_HISTORY_SERVER_PORT=${SPARK_HISTORY_SERVER_PORT:-18080}
-  export SPARK_HISTORY_OPTS="-Dspark.history.fs.logDirectory=$SPARK_HOME/spark-events -Dspark.history.ui.port=$SPARK_HISTORY_SERVER_PORT"
+  export SPARK_HISTORY_OPTS=${SPARK_HISTORY_OPTS:-"-Dspark.history.ui.port=$SPARK_HISTORY_SERVER_PORT"}
   start-history-server.sh >>"${SPARK_LOG_DIR}/spark-history-${SPARK_HISTORY_UI_PORT}.log" 2>&1
   sleep 5
   bash /opt/check_service_status_utility.sh "Spark" "HistoryServer"

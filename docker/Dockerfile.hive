@@ -18,7 +18,6 @@ RUN echo "Copying the requried jars." \
 	&& rm /opt/hive/lib/log4j-slf4j-impl-*.jar
 
 COPY db_connector_jars/* $HIVE_HOME/lib/
-COPY conf/hive/hive-site.xml $HIVE_HOME/conf/
-COPY conf/hive/beeline-site.xml $HIVE_HOME/conf/
+COPY conf/hive/* $HIVE_HOME/conf/
 
 USER hive

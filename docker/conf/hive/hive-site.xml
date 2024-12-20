@@ -67,37 +67,42 @@
         <name>metastore.metastore.event.db.notification.api.auth</name>
         <value>false</value>
     </property>
-    <!--<property>
-        <name>fs.defaultFS</name>
-        <value>s3a://minio:9000</value>
-    </property>-->
     <property>
         <name>metastore.warehouse.dir</name>
         <value>s3a://warehouse/</value>
     </property>
+    <!--<property>
+        <name>local.tmp.dir</name>
+        <value>file:///tmp/hive-${user.name}</value>
+    </property>
+    <property>
+        <name> hive.exec.stagingdir</name>
+        <value>${local.tmp.dir}/stagingdir</value>
+    </property>
     <property>
         <name>hive.querylog.location</name>
-        <value>$HIVE_HOME/iotmp</value>
-        <description>Location of Hive run time structured log file</description>
+        <value>${local.tmp.dir}/querylog</value>
     </property>
     <property>
         <name>hive.exec.scratchdir</name>
-        <value>file:///tmp/hive-${user.name}/scratch_dir</value>
-    </property>
-    <property>
-        <name>hive.downloaded.resources.dir</name>
-        <value>file:///tmp/hive-${user.name}</value>
-        <description>Temporary local directory for added resources in the remote file system.</description>
+        <value>${local.tmp.dir}/scratchdir</value>
     </property>
     <property>
         <name>hive.exec.local.scratchdir</name>
-        <value>file:///tmp/hive-${user.name}</value>
-        <description>Local scratch space for Hive jobs</description>
+        <value>${local.tmp.dir}/localscratchdir/</value>
+    </property>
+    <property>
+        <name>hive.downloaded.resources.dir</name>
+        <value>${local.tmp.dir}/resources</value>
     </property>
     <property>
         <name>hive.user.install.directory</name>
-        <value>file:///tmp/hive-${user.name}/install_dir</value>
+        <value>${local.tmp.dir}/install</value>
     </property>
+    <property>
+        <name>hive.query.results.cache.directory</name>
+        <value>${local.tmp.dir}/_resultscache_</value>
+    </property>-->
     <property>
         <name>javax.jdo.option.ConnectionDriverName</name>
         <value>org.postgresql.Driver</value>
@@ -127,8 +132,32 @@
         <value>true</value>
     </property>
     <property>
+        <name>hive.metastore.authorization.storage.checks</name>
+        <value>false</value>
+    </property>
+    <property>
+        <name>hive.metastore.pre.event.listeners</name>
+        <name>org.apache.hadoop.hive.ql.security.authorization.AuthorizationPreEventListener</name>
+    </property>
+    <property>
+        <name>hive.security.metastore.authorization.manager</name>
+        <value>org.apache.hadoop.hive.ql.security.authorization.StorageBasedAuthorizationProvider</value>
+    </property>
+    <property>
+        <name>fs.defaultFS</name>
+        <value>s3a://warehouse/</value>
+    </property>
+    <property>
+        <name>fs.s3a.impl</name>
+        <value>org.apache.hadoop.fs.s3a.S3AFileSystem</value>
+    </property>
+    <property>
         <name>fs.s3a.endpoint</name>
         <value>http://minio:9000</value>
+    </property>
+    <property>
+        <name>fs.s3a.path.style.access</name>
+        <value>true</value>
     </property>
     <property>
         <name>fs.s3a.access.key</name>
@@ -139,23 +168,15 @@
         <value>password</value>
     </property>
     <property>
-        <name>fs.s3a.path.style.access</name>
-        <value>true</value>
+        <name>fs.s3a.awsAccessKeyId</name>
+        <value>admin</value>
     </property>
     <property>
-        <name>fs.s3a.impl</name>
-        <value>org.apache.hadoop.fs.s3a.S3AFileSystem</value>
+        <name>fs.s3a.awsSecretAccessKey</name>
+        <value>password</value>
     </property>
     <property>
         <name>fs.s3a.connection.ssl.enabled</name>
-        <value>false</value>
-    </property>
-    <property>
-        <name>fs.s3a.aws.credentials.provider</name>
-        <value>org.apache.hadoop.fs.s3a.SimpleAWSCredentialsProvider</value>
-    </property>
-    <property>
-        <name>hive.metastore.authorization.storage.checks</name>
         <value>false</value>
     </property>
 </configuration>

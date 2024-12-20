@@ -74,11 +74,12 @@ download_hadoop_aws_jars() {
     mkdir -p "$HADOOP_AWS_JARS_PATH"
     HADOOP_VERSION=${HADOOP_VERSION:-3.3.4}
     AWS_JAVA_SDK_BUNDLE_VERSION=${AWS_JAVA_SDK_BUNDLE_VERSION:-1.12.262}
-    
-    curl -s "$MVN_REPO_URL/com/amazonaws/aws-java-sdk-bundle/$AWS_JAVA_SDK_BUNDLE_VERSION/aws-java-sdk-bundle-$AWS_JAVA_SDK_BUNDLE_VERSION.jar" \
-      -o "$HADOOP_AWS_JARS_PATH/aws-java-sdk-bundle-$AWS_JAVA_SDK_BUNDLE_VERSION.jar" &&
-      curl -s "$MVN_REPO_URL/org/apache/hadoop/hadoop-aws/$HADOOP_VERSION/hadoop-aws-$HADOOP_VERSION.jar" \
-        -o "$HADOOP_AWS_JARS_PATH/hadoop-aws-$HADOOP_VERSION.jar"
+
+    curl https://repo1.maven.org/maven2/com/amazonaws/aws-java-sdk-bundle/1.12.262/aws-java-sdk-bundle-1.12.262.jar \
+      -o $HADOOP_AWS_JARS_PATH/aws-java-sdk-bundle-1.12.262.jar
+
+    curl https://repo1.maven.org/maven2/org/apache/hadoop/hadoop-aws/3.3.4/hadoop-aws-3.3.4.jar \
+      -o $HADOOP_AWS_JARS_PATH/hadoop-aws-3.3.4.jar
   fi
 }
 
