@@ -494,8 +494,6 @@ services:
     environment:
       - AWS_ACCESS_KEY_ID=admin
       - AWS_SECRET_ACCESS_KEY=password
-      - AWS_REGION=us-east-1
-      - S3_PATH_STYLE_ACCESS=true
       - S3_ENDPOINT=http://minio:9000
     volumes:
       - ./data/notebooks:/home/jovyan/work
