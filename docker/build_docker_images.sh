@@ -14,6 +14,7 @@ export DOCKER_HUB_USERNAME="rangareddy1988"
 export HADOOP_AWS_JARS_PATH="$CURRENT_DIR/hadoop-s3-jars"
 export DB_CONNECTOR_JARS_PATH="$CURRENT_DIR/db_connector_jars"
 export TRINO_VERSION=${TRINO_VERSION:-460}
+export JUPYTER_VERSION=${JUPYTER_VERSION:-latest}
 export MVN_REPO_URL="https://repo1.maven.org/maven2/"
 
 # Function to check Docker installation
@@ -110,6 +111,7 @@ build_docker_image "$SPARK_VERSION" "./Dockerfile.spark" "spark"
 build_docker_image "$KAFKA_CONNECT_VERSION" "./Dockerfile.kafka_connect" "kafka-connect"
 build_docker_image "$CONFLUENT_KAFKACAT_VERSION" "./Dockerfile.kafka_cat" "kafka-cat"
 build_docker_image "$TRINO_VERSION" "./Dockerfile.trino" "trino"
+build_docker_image "$JUPYTER_VERSION" "./Dockerfile.jupyter" "jupyter-notebook"
 
 # Prune unused Docker images
 if docker image prune -f; then

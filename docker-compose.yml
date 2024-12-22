@@ -480,6 +480,37 @@ services:
     networks:
       - datalake
 
+  jupyter-notebook:
+    image: rangareddy1988/ranga-jupyter-notebook:${JUPYTER_NOTEBOOK_VERSION:-latest}
+    platform: ${PLATFORM:-linux/amd64}
+    container_name: jupyter-notebook
+    hostname: jupyter-notebook
+    restart: unless-stopped
+    depends_on:
+      minio:
+        condition: service_healthy
+      hive-metastore:
+        condition: service_healthy
+    environment:
+      - AWS_ACCESS_KEY_ID=admin
+      - AWS_SECRET_ACCESS_KEY=password
+      - AWS_REGION=us-east-1
+      - S3_PATH_STYLE_ACCESS=true
+      - S3_ENDPOINT=http://minio:9000
+    volumes:
+      - ./data/notebooks:/home/jovyan/work
+    ports:
+      - "8888:8888"
+    healthcheck:
+      test: nc -z localhost 8888 || exit 1
+      start_period: 20s
+      start_interval: 10s
+      interval: 30s
+      timeout: 30s
+      retries: 5
+    networks:
+      - datalake
+
 networks:
   datalake:
     name: datalake
