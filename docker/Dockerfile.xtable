@@ -8,9 +8,6 @@ RUN apt-get -qq update -y --fix-missing \
 ARG XTABLE_HOME=${XTABLE_HOME:-/opt/xtable}
 ENV XTABLE_HOME=$XTABLE_HOME
 
-RUN apt-get -qq update -y --fix-missing \
-    && apt-get -qq install -y --no-install-recommends vim
-
 RUN echo "Downloading the xtable..." && \
     git clone https://github.com/apache/incubator-xtable.git $XTABLE_HOME
 
@@ -27,9 +24,22 @@ FROM eclipse-temurin:11.0.25_9-jdk AS final
 ARG XTABLE_HOME=${XTABLE_HOME:-/opt/xtable}
 ENV XTABLE_HOME=$XTABLE_HOME
 
+RUN apt-get -qq update -y --fix-missing \
+    && apt-get -qq install -y --no-install-recommends vim curl unzip sudo 
+
 COPY --from=xtable-base /tmp/xtable-utilities.jar $XTABLE_HOME/xtable-utilities.jar
+
+# Install AWS CLI
+RUN curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip" \
+    && unzip awscliv2.zip \
+    && sudo ./aws/install \
+    && rm awscliv2.zip \
+    && rm -rf aws/
 
 WORKDIR $XTABLE_HOME
 
-# Keep the container running
-CMD ["tail", "-f", "/dev/null"]
+COPY conf/xtable/my_config.yaml $XTABLE_HOME
+COPY scripts/xtable/entrypoint.sh /opt/entrypoint.sh
+RUN chmod 755 /opt/entrypoint.sh
+
+ENTRYPOINT ["/opt/entrypoint.sh"]

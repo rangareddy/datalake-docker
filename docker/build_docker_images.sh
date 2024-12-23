@@ -2,7 +2,10 @@
 set -e
 
 # Define constants
-CURRENT_DIR=$(pwd)
+CURRENT_DIR="$(
+  cd "$(dirname "$0")"
+  pwd -P
+)"
 export HIVE_VERSION=${HIVE_VERSION:-4.0.0}
 export SPARK_VERSION=${SPARK_VERSION:-3.5.3}
 export KAFKA_CONNECT_VERSION=${KAFKA_CONNECT_VERSION:-7.4.7}

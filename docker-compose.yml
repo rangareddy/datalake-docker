@@ -521,9 +521,11 @@ services:
       hive-metastore:
         condition: service_healthy
     environment:
+      - IS_AWS_ENABLED=true
       - AWS_ACCESS_KEY_ID=admin
       - AWS_SECRET_ACCESS_KEY=password
-      - S3_ENDPOINT=http://minio:9000
+      - AWS_ENDPOINT_URL=http://minio:9000
+      - AWS_REGION=us-east-1
     networks:
       - datalake
 

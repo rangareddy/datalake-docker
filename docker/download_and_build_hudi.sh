@@ -2,12 +2,14 @@
 set -euo pipefail # Enable strict error handling
 
 # Define constants
-CURR_DIR=$(pwd)
-export CURRENT_DIR=${CURRENT_DIR:-$CURR_DIR}
-export HUDI_DIR="$CURRENT_DIR/hudi"
-export HUDI_VERSIONS=("0.15.0" "1.0.0")
-export SPARK_MAJOR_VERSION="${SPARK_MAJOR_VERSION:-3.5}"
-export SCALA_VERSION=${SCALA_VERSION:-2.12}
+CURRENT_DIR="$(
+    cd "$(dirname "$0")"
+    pwd -P
+)"
+HUDI_DIR="$CURRENT_DIR/hudi"
+HUDI_VERSIONS=("0.15.0" "1.0.0")
+SPARK_MAJOR_VERSION="${SPARK_MAJOR_VERSION:-3.5}"
+SCALA_VERSION=${SCALA_VERSION:-2.12}
 
 # Function to clone the Hudi repository
 clone_hudi_repo() {
