@@ -15,6 +15,7 @@ export HADOOP_AWS_JARS_PATH="$CURRENT_DIR/hadoop-s3-jars"
 export DB_CONNECTOR_JARS_PATH="$CURRENT_DIR/db_connector_jars"
 export TRINO_VERSION=${TRINO_VERSION:-460}
 export JUPYTER_VERSION=${JUPYTER_VERSION:-latest}
+export XTABLE_VERSION=${XTABLE_VERSION:-"0.2.0"}
 export MVN_REPO_URL="https://repo1.maven.org/maven2/"
 
 # Function to check Docker installation
@@ -54,22 +55,8 @@ get_docker_architecture() {
   exit 1
 }
 
-# Function to build Docker images
-build_docker_image() {
-  local image_version="$1"
-  local dockerfile="$2"
-  local image_name="$3"
-  version_arg=$(echo ${image_name}_VERSION | tr '[:lower:]' '[:upper:]')
-  local image_version_str="${version_arg//-/_}"
-  if docker build --build-arg "$image_version_str=$image_version" --platform linux/"$ARCH" -f "$dockerfile" . -t "$DOCKER_HUB_USERNAME/ranga-$image_name:$image_version" -t "$DOCKER_HUB_USERNAME/ranga-$image_name:latest"; then
-    echo "Successfully built $image_name:$image_version"
-  else
-    echo "Failed to build $image_name:$image_version"
-    exit 1
-  fi
-}
-
 download_hadoop_aws_jars() {
+
   if [ ! -d "$HADOOP_AWS_JARS_PATH" ]; then
     echo "Downloading Hadoop AWS jar(s) ..."
     mkdir -p "$HADOOP_AWS_JARS_PATH"
@@ -85,13 +72,16 @@ download_hadoop_aws_jars() {
 }
 
 download_db_connector_jars() {
+
   if [ ! -d "$DB_CONNECTOR_JARS_PATH" ]; then
     echo "Downloading DB connector jar(s) ..."
     mkdir -p "$DB_CONNECTOR_JARS_PATH"
     POSTGRES_JDBC_VERSION=${POSTGRES_JDBC_VERSION:-42.7.3}
     MYSQL_CONNECTOR_JAVA_VERSION=${MYSQL_CONNECTOR_JAVA_VERSION:-8.0.29}
+
     curl -s "https://jdbc.postgresql.org/download/postgresql-$POSTGRES_JDBC_VERSION.jar" \
       -o "$DB_CONNECTOR_JARS_PATH/postgresql-jdbc.jar"
+
     curl -s "$MVN_REPO_URL/mysql/mysql-connector-java/$MYSQL_CONNECTOR_JAVA_VERSION/mysql-connector-java-$MYSQL_CONNECTOR_JAVA_VERSION.jar" \
       -o "$DB_CONNECTOR_JARS_PATH/mysql-connector-java.jar"
   fi
@@ -105,13 +95,37 @@ sh download_and_build_hudi.sh
 download_hadoop_aws_jars
 download_db_connector_jars
 
-# Build Docker images
-build_docker_image "$HIVE_VERSION" "./Dockerfile.hive" "hive"
-build_docker_image "$SPARK_VERSION" "./Dockerfile.spark" "spark"
-build_docker_image "$KAFKA_CONNECT_VERSION" "./Dockerfile.kafka_connect" "kafka-connect"
-build_docker_image "$CONFLUENT_KAFKACAT_VERSION" "./Dockerfile.kafka_cat" "kafka-cat"
-build_docker_image "$TRINO_VERSION" "./Dockerfile.trino" "trino"
-build_docker_image "$JUPYTER_VERSION" "./Dockerfile.jupyter" "jupyter-notebook"
+# Function to build Docker images
+build_docker_image() {
+  local image_name="$1"
+  local image_version="$2"
+  local dockerfile="$3"
+
+  version_arg=$(echo "${image_name}_VERSION" | tr '[:lower:]' '[:upper:]')
+  local image_version_str="${version_arg//-/_}"
+  if docker build --build-arg "$image_version_str=$image_version" --platform linux/"$ARCH" -f "./Dockerfile.$dockerfile" . -t "$DOCKER_HUB_USERNAME/ranga-$image_name:$image_version" -t "$DOCKER_HUB_USERNAME/ranga-$image_name:latest"; then
+    echo "Successfully built $image_name:$image_version"
+  else
+    echo "Failed to build $image_name:$image_version"
+    exit 1
+  fi
+}
+
+declare -a image_builds=(
+  "hive $HIVE_VERSION hive"
+  "spark $SPARK_VERSION spark"
+  "kafka-connect $KAFKA_CONNECT_VERSION kafka_connect"
+  "kafka-cat $CONFLUENT_KAFKACAT_VERSION kafka_cat"
+  "trino $TRINO_VERSION trino"
+  "jupyter-notebook $JUPYTER_VERSION jupyter"
+  "xtable $XTABLE_VERSION xtable"
+)
+
+# Iterate through the array and build images
+for build_config in "${image_builds[@]}"; do
+  IFS=' ' read -r image_name version dockerfile_ext <<<"$build_config"
+  build_docker_image "$image_name" "$version" "$dockerfile_ext"
+done
 
 # Prune unused Docker images
 if docker image prune -f; then

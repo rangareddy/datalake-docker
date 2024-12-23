@@ -509,6 +509,24 @@ services:
     networks:
       - datalake
 
+  xtable:
+    image: rangareddy1988/ranga-xtable:${XTABLE_VERSION:-latest}
+    platform: ${PLATFORM:-linux/amd64}
+    container_name: xtable
+    hostname: xtable
+    restart: unless-stopped
+    depends_on:
+      minio:
+        condition: service_healthy
+      hive-metastore:
+        condition: service_healthy
+    environment:
+      - AWS_ACCESS_KEY_ID=admin
+      - AWS_SECRET_ACCESS_KEY=password
+      - S3_ENDPOINT=http://minio:9000
+    networks:
+      - datalake
+
 networks:
   datalake:
     name: datalake
