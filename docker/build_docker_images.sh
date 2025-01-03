@@ -96,6 +96,8 @@ check_docker_running
 ARCH=$(get_docker_architecture)
 
 sh download_and_build_hudi.sh
+sh download_flink_jars.sh
+
 download_hadoop_aws_jars
 download_db_connector_jars
 

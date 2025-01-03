@@ -22,69 +22,7 @@ RUN ln -s /usr/bin/python3 /usr/bin/python
 
 COPY conf/flink/* $FLINK_CONF/
 COPY conf/hadoop/core-site.xml $FLINK_CONF/
-
-ARG HADOOP_VERSION=${HADOOP_VERSION:-3.3.4}
-ARG AWS_JAVA_SDK_VERSION=${AWS_JAVA_SDK_VERSION:-1.12.648}
-ARG KAFKA_VERSION=${KAFKA_VERSION:-3.4.0}
-ARG FLINK_CONNNECTOR_VERSION=${FLINK_CONNNECTOR_VERSION:-3.1.0-1.17}
-ARG MVN_URL=https://repo1.maven.org/maven2
-ARG APACHE_URL=$MVN_URL/org/apache
-ARG POSTGRES_JDBC_VERSION=${POSTGRES_JDBC_VERSION:-42.7.3}
-ARG MYSQL_CONNECTOR_JAVA_VERSION=${MYSQL_CONNECTOR_JAVA_VERSION:-8.0.29}
-ARG ICEBERG_VERSION=${ICEBERG_VERSION:-1.5.2}
-ARG HUDI_VERSION=${HUDI_VERSION:-1.0.0}
-ARG DELTA_VERSION=${DELTA_VERSION:-3.2.0}
-ARG HIVE_VERSION=${HIVE_VERSION:-3.1.3}
-
-# Download and Install JARs
-RUN echo "Install Hadoop JARs" && \
-    mkdir -p $FLINK_LIB/hadoop && \
-    wget -P $FLINK_LIB/hadoop/ $APACHE_URL/hadoop/hadoop-client/$HADOOP_VERSION/hadoop-client-$HADOOP_VERSION.jar && \
-    wget -P $FLINK_LIB/hadoop/ $APACHE_URL/hadoop/hadoop-common/$HADOOP_VERSION/hadoop-common-$HADOOP_VERSION.jar && \
-    wget -P $FLINK_LIB/hadoop/ $APACHE_URL/hadoop/hadoop-auth/$HADOOP_VERSION/hadoop-auth-$HADOOP_VERSION.jar && \
-    wget -P $FLINK_LIB/hadoop/ $APACHE_URL/hadoop/hadoop-hdfs-client/$HADOOP_VERSION/hadoop-hdfs-client-$HADOOP_VERSION.jar && \
-    wget -P $FLINK_LIB/hadoop/ $APACHE_URL/hadoop/hadoop-mapreduce-client-core/$HADOOP_VERSION/hadoop-mapreduce-client-core-$HADOOP_VERSION.jar && \
-    wget -P $FLINK_LIB/hadoop/ $APACHE_URL/hadoop/hadoop-aws/$HADOOP_VERSION/hadoop-aws-$HADOOP_VERSION.jar && \
-    wget -P $FLINK_LIB/hadoop/ $MVN_URL/com/amazonaws/aws-java-sdk-bundle/$AWS_JAVA_SDK_VERSION/aws-java-sdk-bundle-$AWS_JAVA_SDK_VERSION.jar && \
-    wget -P $FLINK_LIB/hadoop/ $APACHE_URL/hadoop/thirdparty/hadoop-shaded-guava/1.1.1/hadoop-shaded-guava-1.1.1.jar && \
-    wget -P $FLINK_LIB/hadoop/ $APACHE_URL/commons/commons-configuration2/2.1.1/commons-configuration2-2.1.1.jar && \
-    wget -P $FLINK_LIB/hadoop/ $MVN_URL/commons-logging/commons-logging/1.1.3/commons-logging-1.1.3.jar && \
-    wget -P $FLINK_LIB/hadoop/ $MVN_URL/org/codehaus/woodstox/stax2-api/4.2.1/stax2-api-4.2.1.jar && \
-    wget -P $FLINK_LIB/hadoop/ $MVN_URL/com/fasterxml/woodstox/woodstox-core/5.3.0/woodstox-core-5.3.0.jar && \
-    wget -P $FLINK_LIB/hadoop/ $APACHE_URL/flink/flink-s3-fs-hadoop/$FLINK_VERSION/flink-s3-fs-hadoop-$FLINK_VERSION.jar
-
-RUN echo "Install Kafka connector and its dependent JARs" && \
-    mkdir -p $FLINK_LIB/kafka && \
-    wget -P $FLINK_LIB/kafka/ $APACHE_URL/flink/flink-connector-kafka/$FLINK_VERSION/flink-connector-kafka-$FLINK_VERSION.jar && \ 
-    wget -P $FLINK_LIB/kafka/ $APACHE_URL/flink/flink-sql-connector-kafka/$FLINK_VERSION/flink-sql-connector-kafka-$FLINK_VERSION.jar && \
-    wget -P $FLINK_LIB/kafka/ $APACHE_URL/kafka/kafka-clients/$KAFKA_VERSION/kafka-clients-$KAFKA_VERSION.jar
-
-RUN echo "Install JDBC connector and its dependent JARs" && \
-    mkdir -p $FLINK_LIB/jdbc && \
-    wget -P $FLINK_LIB/jdbc/ $APACHE_URL/flink/flink-connector-jdbc/$FLINK_CONNNECTOR_VERSION/flink-connector-jdbc-$FLINK_CONNNECTOR_VERSION.jar && \
-    wget -P $FLINK_LIB/jdbc/ https://jdbc.postgresql.org/download/postgresql-$POSTGRES_JDBC_VERSION.jar && \
-    wget -P $FLINK_LIB/jdbc/ $MVN_URL/mysql/mysql-connector-java/$MYSQL_CONNECTOR_JAVA_VERSION/mysql-connector-java-$MYSQL_CONNECTOR_JAVA_VERSION.jar
-
-RUN echo "Install Flink's Hive connector JARs" && \
-    mkdir -p $FLINK_LIB/hive && \
-    wget -P $FLINK_LIB/hive/ $APACHE_URL/flink/flink-connector-hive_$SCALA_VERSION/$FLINK_VERSION/flink-connector-hive_$SCALA_VERSION-$FLINK_VERSION.jar && \
-    wget -P $FLINK_LIB/hive/ $APACHE_URL/flink/flink-sql-connector-hive-$HIVE_VERSION_$SCALA_VERSION/$FLINK_VERSION/flink-sql-connector-hive-$HIVE_VERSION_$SCALA_VERSION-$FLINK_VERSION.jar && \
-    wget -P $FLINK_LIB/hive/ $APACHE_URL/hive/hive-exec/$HIVE_VERSION/hive-exec-$HIVE_VERSION.jar
-
-RUN echo "Install Dependencies for Hudi" && \
-    mkdir -p $FLINK_LIB/hudi && \
-    wget -P $FLINK_LIB/hudi/ $APACHE_URL/hudi/hudi-flink${FLINK_MAJOR_VERSION}-bundle/${HUDI_VERSION}/hudi-flink${FLINK_MAJOR_VERSION}-bundle-${HUDI_VERSION}.jar
-
-RUN echo "Install Dependencies for Iceberg" && \
-    mkdir -p $FLINK_LIB/iceberg && \
-    wget -P $FLINK_LIB/iceberg/ $APACHE_URL/iceberg/iceberg-flink-runtime-$FLINK_MAJOR_VERSION/$ICEBERG_VERSION/iceberg-flink-runtime-$FLINK_MAJOR_VERSION-$ICEBERG_VERSION.jar
-
-RUN echo "Install Dependencies for Delta Lake" && \
-    mkdir -p $FLINK_LIB/delta && \
-    wget -P $FLINK_LIB/delta/ $MVN_URL/io/delta/delta-storage/$DELTA_VERSION/delta-storage-$DELTA_VERSION.jar && \
-    wget -P $FLINK_LIB/delta/ $MVN_URL/io/delta/delta-standalone_$SCALA_VERSION/$DELTA_VERSION/delta-standalone_$SCALA_VERSION-$DELTA_VERSION.jar && \
-    wget -P $FLINK_LIB/delta/ $MVN_URL/io/delta/delta-flink/$DELTA_VERSION/delta-flink-$DELTA_VERSION.jar && \
-    wget -P $FLINK_LIB/delta/ $APACHE_URL/flink/flink-sql-parquet/$FLINK_VERSION/flink-sql-parquet-$FLINK_VERSION.jar
+COPY flink-lib/* $FLINK_LIB
 
 #RUN echo "Add Flink S3 Plugin" && \
 #    mkdir -p $FLINK_HOME/plugins/s3-fs-hadoop && \
