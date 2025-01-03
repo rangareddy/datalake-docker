@@ -3,7 +3,6 @@ services:
     image: confluentinc/cp-zookeeper:${CONFLUENT_VERSION:-7.4.7}
     platform: ${PLATFORM:-linux/amd64}
     container_name: zookeeper
-    hostname: zookeeper
     restart: unless-stopped
     environment:
       ZOOKEEPER_SERVER_ID: 1
@@ -27,7 +26,6 @@ services:
     image: confluentinc/cp-kafka:${CONFLUENT_VERSION:-7.4.7}
     platform: ${PLATFORM:-linux/amd64}
     container_name: kafka
-    hostname: kafka
     restart: unless-stopped
     depends_on:
       zookeeper:
@@ -61,7 +59,6 @@ services:
     image: confluentinc/cp-kafka:${CONFLUENT_VERSION:-7.4.7}
     platform: ${PLATFORM:-linux/amd64}
     container_name: kafka-init-topics
-    hostname: kafka-init-topics
     depends_on:
       kafka:
         condition: service_healthy
@@ -76,7 +73,6 @@ services:
     image: confluentinc/cp-schema-registry:${CONFLUENT_VERSION:-7.4.7}
     platform: ${PLATFORM:-linux/amd64}
     container_name: kafka-schema-registry
-    hostname: kafka-schema-registry
     restart: unless-stopped
     depends_on:
       kafka:
@@ -102,7 +98,6 @@ services:
   kafka-rest:
     image: confluentinc/cp-kafka-rest:${CONFLUENT_VERSION:-7.4.7}
     platform: ${PLATFORM:-linux/amd64}
-    hostname: kafka-rest
     container_name: kafka-rest
     restart: unless-stopped
     depends_on:
@@ -128,7 +123,6 @@ services:
     image: rangareddy1988/ranga-kafka-connect:${KAFKA_CONNECT_VERSION:-7.4.7}
     platform: ${PLATFORM:-linux/amd64}
     container_name: kafka-connect
-    hostname: kafka-connect
     restart: unless-stopped
     depends_on:
       postgres:
@@ -171,7 +165,6 @@ services:
     image: rangareddy1988/ranga-kafka-cat:${CONFLUENT_KAFKACAT_VERSION:-latest}
     platform: ${PLATFORM:-linux/amd64}
     container_name: kafka-cat
-    hostname: kafka-cat
     restart: unless-stopped
     depends_on:
       kafka:
@@ -183,7 +176,6 @@ services:
     image: provectuslabs/kafka-ui:${KAFKA_UI_VERSION:-latest}
     platform: ${PLATFORM:-linux/amd64}
     container_name: kafka-ui
-    hostname: kafka-ui
     restart: unless-stopped
     depends_on:
       kafka:
@@ -217,7 +209,6 @@ services:
     image: rangareddy1988/ranga-hive:${HIVE_VERSION:-4.0.0}
     platform: ${PLATFORM:-linux/amd64}
     container_name: hive-metastore
-    hostname: hive-metastore
     restart: unless-stopped
     depends_on:
       postgres:
@@ -235,9 +226,10 @@ services:
     healthcheck:
       test: bash -c "exec 6<> /dev/tcp/localhost/9083"
       start_period: 50s
-      interval: 40s
+      start_interval: 20s
+      interval: 50s
       timeout: 30s
-      retries: 5
+      retries: 10
     networks:
       - datalake
 
@@ -245,7 +237,6 @@ services:
     image: rangareddy1988/ranga-hive:${HIVE_VERSION:-4.0.0}
     platform: ${PLATFORM:-linux/amd64}
     container_name: hive-server
-    hostname: hive-server
     restart: unless-stopped
     depends_on:
       hive-metastore:
@@ -269,7 +260,6 @@ services:
     image: rangareddy1988/ranga-spark:${SPARK_VERSION:-3.5.3}
     platform: ${PLATFORM:-linux/amd64}
     container_name: spark-master
-    hostname: spark-master
     restart: unless-stopped
     user: root
     depends_on:
@@ -299,7 +289,6 @@ services:
     image: rangareddy1988/ranga-spark:${SPARK_VERSION:-3.5.3}
     platform: ${PLATFORM:-linux/amd64}
     container_name: spark-worker
-    hostname: spark-worker
     restart: unless-stopped
     depends_on:
       spark-master:
@@ -327,7 +316,6 @@ services:
     image: postgres:${POSTGRES_VERSION:-16.4}
     platform: ${PLATFORM:-linux/amd64}
     container_name: postgres
-    hostname: postgres
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
@@ -354,7 +342,6 @@ services:
     image: ubuntu/mysql:${MYSQL_VERSION:-8.0-20.04_edge}
     platform: ${PLATFORM:-linux/amd64}
     container_name: mysql
-    hostname: mysql
     restart: unless-stopped
     environment:
       - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD:-password}
@@ -385,7 +372,6 @@ services:
     image: minio/minio
     platform: ${PLATFORM:-linux/amd64}
     container_name: minio
-    hostname: minio
     restart: unless-stopped
     environment:
       - MINIO_ROOT_USER=admin
@@ -412,7 +398,6 @@ services:
     image: minio/mc
     platform: ${PLATFORM:-linux/amd64}
     container_name: mc
-    hostname: mc
     depends_on:
       minio:
         condition: service_healthy
@@ -424,8 +409,10 @@ services:
     entrypoint: >
       /bin/sh -c " 
       until (/usr/bin/mc config host add minio http://minio:9000 admin password) do echo '...waiting...' && sleep 1; done; 
-      /usr/bin/mc mb minio/warehouse; 
+      /usr/bin/mc mb minio/warehouse;
+      /usr/bin/mc mb minio/tmp;
       /usr/bin/mc policy set public minio/warehouse;
+      /usr/bin/mc policy set public minio/tmp;
       tail -f /dev/null
       "
     networks:
@@ -435,7 +422,6 @@ services:
     image: rangareddy1988/ranga-trino:${TRINO_VERSION:-460}
     platform: ${PLATFORM:-linux/amd64}
     container_name: trino
-    hostname: trino
     restart: unless-stopped
     depends_on:
       minio:
@@ -456,7 +442,6 @@ services:
   cloudbeaver:
     image: dbeaver/cloudbeaver:${CLOUDBEAVER_VERSION:-latest}
     container_name: cloudbeaver
-    hostname: cloudbeaver
     restart: unless-stopped
     depends_on:
       postgres:
@@ -472,8 +457,6 @@ services:
       - ./data/cloudbeaver:/opt/cloudbeaver/workspace
     healthcheck:
       test: nc -z localhost 8978 || exit 1
-      start_period: 20s
-      start_interval: 10s
       interval: 30s
       timeout: 30s
       retries: 5
@@ -484,7 +467,6 @@ services:
     image: rangareddy1988/ranga-jupyter-notebook:${JUPYTER_NOTEBOOK_VERSION:-latest}
     platform: ${PLATFORM:-linux/amd64}
     container_name: jupyter-notebook
-    hostname: jupyter-notebook
     restart: unless-stopped
     depends_on:
       minio:
@@ -513,7 +495,6 @@ services:
     image: rangareddy1988/ranga-xtable:${XTABLE_VERSION:-latest}
     platform: ${PLATFORM:-linux/amd64}
     container_name: xtable
-    hostname: xtable
     restart: unless-stopped
     depends_on:
       minio:
@@ -526,6 +507,59 @@ services:
       - AWS_SECRET_ACCESS_KEY=password
       - AWS_ENDPOINT_URL=http://minio:9000
       - AWS_REGION=us-east-1
+    networks:
+      - datalake
+
+  jobmanager:
+    image: rangareddy1988/ranga-flink:${FLINK_VERSION:-latest}
+    platform: ${PLATFORM:-linux/amd64}
+    container_name: jobmanager
+    restart: unless-stopped
+    depends_on:
+      kafka:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      hive-metastore:
+        condition: service_healthy
+    environment:
+      - |
+        FLINK_PROPERTIES=
+        jobmanager.rpc.address: jobmanager
+      - AWS_ACCESS_KEY_ID=admin
+      - AWS_SECRET_ACCESS_KEY=password
+      - AWS_ENDPOINT_URL=http://minio:9000
+      - AWS_REGION=us-east-1
+      - AWS_DEFAULT_REGION=us-east-1
+      - S3_ENDPOINT=http://minio:9000
+      - S3_PATH_STYLE_ACCESS=true
+    command: jobmanager
+    ports:
+      - 8084:8081
+    networks:
+      - datalake
+
+  taskmanager:
+    image: rangareddy1988/ranga-flink:${FLINK_VERSION:-latest}
+    platform: ${PLATFORM:-linux/amd64}
+    container_name: taskmanager
+    restart: unless-stopped
+    depends_on:
+      - jobmanager
+    environment:
+      - |
+        FLINK_PROPERTIES=
+        jobmanager.rpc.address: jobmanager
+        taskmanager.numberOfTaskSlots: 4
+      - AWS_ACCESS_KEY_ID=admin
+      - AWS_SECRET_ACCESS_KEY=password
+      - AWS_ENDPOINT_URL=http://minio:9000
+      - AWS_REGION=us-east-1
+      - AWS_DEFAULT_REGION=us-east-1
+      - S3_ENDPOINT=http://minio:9000
+      - S3_PATH_STYLE_ACCESS=true
+    command: taskmanager
+    scale: 1
     networks:
       - datalake
 

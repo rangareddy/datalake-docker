@@ -33,6 +33,7 @@ ENV PATH="${SPARK_HOME}/sbin:${SPARK_HOME}/bin:${PATH}"
 
 COPY db_connector_jars/* $SPARK_HOME/lib/
 COPY conf/spark/* $SPARK_CONF/
+COPY conf/hadoop/core-site.xml $SPARK_CONF/
 COPY hudi_1_0_0 $HUDI_HOME
 COPY scripts/spark/entrypoint.sh /opt/entrypoint.sh
 COPY check_service_status_utility.sh /opt/check_service_status_utility.sh

@@ -19,6 +19,7 @@ export DB_CONNECTOR_JARS_PATH="$CURRENT_DIR/db_connector_jars"
 export TRINO_VERSION=${TRINO_VERSION:-460}
 export JUPYTER_VERSION=${JUPYTER_VERSION:-latest}
 export XTABLE_VERSION=${XTABLE_VERSION:-"0.2.0"}
+export FLINK_VERSION=${FLINK_VERSION:-"1.17.2"}
 export MVN_REPO_URL="https://repo1.maven.org/maven2/"
 
 # Function to check Docker installation
@@ -67,10 +68,10 @@ download_hadoop_aws_jars() {
     AWS_JAVA_SDK_BUNDLE_VERSION=${AWS_JAVA_SDK_BUNDLE_VERSION:-1.12.262}
 
     curl https://repo1.maven.org/maven2/com/amazonaws/aws-java-sdk-bundle/1.12.262/aws-java-sdk-bundle-1.12.262.jar \
-      -o $HADOOP_AWS_JARS_PATH/aws-java-sdk-bundle-1.12.262.jar
+      -o "$HADOOP_AWS_JARS_PATH"/aws-java-sdk-bundle-1.12.262.jar
 
     curl https://repo1.maven.org/maven2/org/apache/hadoop/hadoop-aws/3.3.4/hadoop-aws-3.3.4.jar \
-      -o $HADOOP_AWS_JARS_PATH/hadoop-aws-3.3.4.jar
+      -o "$HADOOP_AWS_JARS_PATH"/hadoop-aws-3.3.4.jar
   fi
 }
 
@@ -122,7 +123,10 @@ declare -a image_builds=(
   "trino $TRINO_VERSION trino"
   "jupyter-notebook $JUPYTER_VERSION jupyter"
   "xtable $XTABLE_VERSION xtable"
+  "flink $FLINK_VERSION flink"
 )
+
+#declare -a image_builds=("flink $FLINK_VERSION flink")
 
 # Iterate through the array and build images
 for build_config in "${image_builds[@]}"; do

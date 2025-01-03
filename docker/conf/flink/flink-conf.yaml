@@ -1,0 +1,39 @@
+jobmanager.memory.process.size: 1600Mb
+jobmanager.heap.size: 1024m
+
+jobmanager.rpc.port: 6123
+blob.server.port: 6124
+query.server.port: 6125
+taskmanager.rpc.port: 6122
+
+taskmanager.heap.size: 1024m
+taskmanager.memory.process.size: 2048m
+taskmanager.numberOfTaskSlots: 4
+parallelism.default: 4
+
+execution.checkpointing.interval: 30s
+execution.checkpointing.mode: EXACTLY_ONCE
+state.backend: filesystem
+state.checkpoints.dir: file:///tmp/flink-checkpoints-directory
+state.checkpoints.num-retained: 10
+state.savepoints.dir: file:///tmp/flink-savepoints-directory
+
+heartbeat.interval: 5000
+heartbeat.timeout: 8000
+web.backpressure.refresh-interval: 10000
+rest.flamegraph.enabled: true
+
+s3.access-key: admin
+s3.secret-key: password
+s3.endpoint: http://minio:9000
+s3.path-style-access: true
+s3.path.style.access: true
+s3.aws.credentials.provider: com.amazonaws.auth.EnvironmentVariableCredentialsProvider
+
+#s3.aws.credentials.provider: org.apache.hadoop.fs.s3a.SimpleAWSCredentialsProvider
+#s3.connection.ssl.enabled: false
+#s3.ssl.enabled: false
+
+restart-strategy: fixed-delay
+restart-strategy.fixed-delay.attempts: 3
+restart-strategy.fixed-delay.delay: 10 s
