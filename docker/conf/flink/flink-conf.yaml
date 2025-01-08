@@ -7,10 +7,10 @@ jobmanager.rpc.port: 6123
 taskmanager.rpc.port: 6122
 taskmanager.data.port: 6121
 blob.server.port: 6124
-metrics.internal.query-service.port: 6126
 
 taskmanager.heap.size: 1024m
-taskmanager.memory.process.size: 2048m
+taskmanager.memory.process.size: 1728m
+taskmanager.memory.flink.size: 1024m
 taskmanager.numberOfTaskSlots: 4
 parallelism.default: 4
 
@@ -18,11 +18,10 @@ execution.checkpointing.interval: 60s
 execution.checkpointing.tolerable-failed-checkpoints: 10
 execution.checkpointing.mode: EXACTLY_ONCE
 state.backend.type: hashmap
-state.checkpoints.dir: file:///tmp/flink-checkpoints-directory
+state.checkpoints.dir: file:///tmp/flink/checkpoints
 state.checkpoints.num-retained: 10
-state.savepoints.dir: file:///tmp/flink-savepoints-directory
+state.savepoints.dir: file:///tmp/flink/savepoints
 
-akka.ask.timeout: 300s
 heartbeat.interval: 5000
 heartbeat.timeout: 8000
 web.backpressure.refresh-interval: 10000

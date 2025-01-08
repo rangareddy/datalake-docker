@@ -526,8 +526,6 @@ services:
       - |
         FLINK_PROPERTIES=
         jobmanager.rpc.address: jobmanager
-        rest.address: 0.0.0.0
-        rest.bind-address: 0.0.0.0
       - AWS_ACCESS_KEY_ID=admin
       - AWS_SECRET_ACCESS_KEY=password
       - AWS_ENDPOINT_URL=http://minio:9000
@@ -537,9 +535,15 @@ services:
       - S3_PATH_STYLE_ACCESS=true
     command: jobmanager
     ports:
-      - "8084:8084"
-      - "6123:6123"
-      - "6124:6124"
+      - "8084:8084" # Flink UI
+      - "6123:6123" # RPC Port
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8084/overview | jq -r '.[\"flink-version\"]'"]
+      start_period: 30s
+      start_interval: 10s
+      interval: 30s
+      timeout: 30s
+      retries: 10
     networks:
       - datalake
 
@@ -555,7 +559,6 @@ services:
         FLINK_PROPERTIES=
         jobmanager.rpc.address: jobmanager
         taskmanager.numberOfTaskSlots: 4
-        taskmanager.bind-host: 0.0.0.0
       - AWS_ACCESS_KEY_ID=admin
       - AWS_SECRET_ACCESS_KEY=password
       - AWS_ENDPOINT_URL=http://minio:9000
