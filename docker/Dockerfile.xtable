@@ -1,5 +1,10 @@
 FROM maven:3.6.3-jdk-11 AS xtable-base
 
+SHELL ["/bin/bash", "-c"]
+
+LABEL maintainer="Ranga Reddy <rangareddy.avula@gmail.com>"
+LABEL description="Datalake XTable image"
+
 # Install necessary packages
 RUN apt-get -qq update -y --fix-missing \
     && apt-get -qq install -y --no-install-recommends git curl tar

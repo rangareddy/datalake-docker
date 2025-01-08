@@ -1,7 +1,11 @@
 ARG CONFLUENT_KAFKACAT_VERSION=${CONFLUENT_KAFKACAT_VERSION:-7.1.15}
 FROM confluentinc/cp-kafkacat:$CONFLUENT_KAFKACAT_VERSION
 
-LABEL maintainer="Ranga Reddy"
+SHELL ["/bin/bash", "-c"]
+
+LABEL maintainer="Ranga Reddy <rangareddy.avula@gmail.com>"
+LABEL description="Datalake Kafka Cat image"
+
 USER root
 
 RUN set -ex; \

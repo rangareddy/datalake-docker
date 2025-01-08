@@ -1,8 +1,4 @@
 <configuration>
-    <!--<property>
-        <name>metastore.thrift.uris</name>
-        <value>thrift://0.0.0.0:9083</value>
-    </property>-->
     <property>
         <name>hive.metastore.client.socket.timeout</name>
         <value>300</value>
@@ -71,9 +67,9 @@
         <name>metastore.warehouse.dir</name>
         <value>s3a://warehouse/</value>
     </property>
-    <!--<property>
+    <property>
         <name>local.tmp.dir</name>
-        <value>file:///tmp/hive-${user.name}</value>
+        <value>s3a://tmp/hive</value>
     </property>
     <property>
         <name> hive.exec.stagingdir</name>
@@ -102,7 +98,7 @@
     <property>
         <name>hive.query.results.cache.directory</name>
         <value>${local.tmp.dir}/_resultscache_</value>
-    </property>-->
+    </property>
     <property>
         <name>javax.jdo.option.ConnectionDriverName</name>
         <value>org.postgresql.Driver</value>

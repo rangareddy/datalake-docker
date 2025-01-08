@@ -1,7 +1,11 @@
 ARG HIVE_VERSION=${HIVE_VERSION:-4.0.0}
 FROM apache/hive:$HIVE_VERSION
 
-LABEL maintainer="Ranga Reddy"
+SHELL ["/bin/bash", "-c"]
+
+LABEL maintainer="Ranga Reddy <rangareddy.avula@gmail.com>"
+LABEL description="Datalake Hive image"
+
 USER root
 
 RUN apt-get update && \
@@ -9,15 +13,17 @@ RUN apt-get update && \
 	mkdir -p /home/hive/.beeline && \
 	chown hive /home/hive/.beeline
 
-RUN echo "Copying the requried jars." \
-	&& ln -sf $HADOOP_HOME/share/hadoop/common/lib/guava-27.0-jre.jar $HIVE_HOME/lib/ \
+RUN ln -sf $HADOOP_HOME/share/hadoop/common/lib/guava-27.0-jre.jar $HIVE_HOME/lib/ \
 	&& ln -sf $HADOOP_HOME/share/hadoop/tools/lib/aws-java-sdk-bundle-*.jar $HIVE_HOME/lib/ \
 	&& ln -sf $HADOOP_HOME/share/hadoop/tools/lib/hadoop-aws*.jar $HIVE_HOME/lib/ \
 	&& ln -sf $HADOOP_HOME/share/hadoop/tools/lib/aws-java-sdk-bundle-*.jar $HADOOP_HOME/share/hadoop/common/lib/ \
 	&& ln -sf $HADOOP_HOME/share/hadoop/tools/lib/hadoop-aws-$HADOOP_VERSION.jar $HADOOP_HOME/share/hadoop/common/lib/ \
 	&& rm /opt/hive/lib/log4j-slf4j-impl-*.jar
 
-COPY db_connector_jars/* $HIVE_HOME/lib/
 COPY conf/hive/* $HIVE_HOME/conf/
+COPY db_connector_jars/* $HIVE_HOME/lib/
+
+ARG HUDI_TARGET_DIR=$HUDI_TARGET_DIR
+COPY $HUDI_TARGET_DIR/hudi-hadoop-mr-bundle/target/* $HIVE_HOME/lib/
 
 USER hive

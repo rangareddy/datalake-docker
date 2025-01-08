@@ -6,77 +6,48 @@ CURRENT_DIR="$(
   cd "$(dirname "$0")"
   pwd -P
 )"
-export HIVE_VERSION=${HIVE_VERSION:-4.0.0}
-export SPARK_VERSION=${SPARK_VERSION:-3.5.3}
-export KAFKA_CONNECT_VERSION=${KAFKA_CONNECT_VERSION:-7.4.7}
-export CONFLUENT_KAFKACAT_VERSION=${CONFLUENT_KAFKACAT_VERSION:-7.1.15}
-export HUDI_VERSIONS=("0.15.0" "1.0.0")
-export SPARK_MAJOR_VERSION="${SPARK_VERSION%.*}"
-export SCALA_VERSION=${SCALA_VERSION:-2.12}
-export DOCKER_HUB_USERNAME="rangareddy1988"
-export HADOOP_AWS_JARS_PATH="$CURRENT_DIR/hadoop-s3-jars"
-export DB_CONNECTOR_JARS_PATH="$CURRENT_DIR/db_connector_jars"
-export TRINO_VERSION=${TRINO_VERSION:-460}
-export JUPYTER_VERSION=${JUPYTER_VERSION:-latest}
-export XTABLE_VERSION=${XTABLE_VERSION:-"0.2.0"}
-export FLINK_VERSION=${FLINK_VERSION:-"1.17.2"}
-export MVN_REPO_URL="https://repo1.maven.org/maven2/"
+DOCKER_HUB_USERNAME="rangareddy1988"
+HIVE_VERSION=${HIVE_VERSION:-4.0.0}
+SPARK_VERSION=${SPARK_VERSION:-3.5.3}
+KAFKA_CONNECT_VERSION=${KAFKA_CONNECT_VERSION:-7.4.7}
+CONFLUENT_KAFKACAT_VERSION=${CONFLUENT_KAFKACAT_VERSION:-7.1.15}
+HUDI_VERSION="1.0.0"
+SCALA_VERSION=${SCALA_VERSION:-2.12}
+HADOOP_AWS_JARS_PATH="$CURRENT_DIR/hadoop-s3-jars"
+DB_CONNECTOR_JARS_PATH="$CURRENT_DIR/db_connector_jars"
+SOFTWARE_PATH="$CURRENT_DIR/software"
+TRINO_VERSION=${TRINO_VERSION:-460}
+JUPYTER_VERSION=${JUPYTER_VERSION:-latest}
+XTABLE_VERSION=${XTABLE_VERSION:-"0.2.0"}
+FLINK_VERSION=${FLINK_VERSION:-"1.17.2"}
+MVN_REPO_URL="https://repo1.maven.org/maven2/"
+HADOOP_VERSION=${HADOOP_VERSION:-3.3.4}
+HUDI_TARGET_VERSION=$(echo "$HUDI_VERSION" | sed 's/\./_/g')
+HUDI_TARGET_DIR="hudi_${HUDI_TARGET_VERSION}"
 
-# Function to check Docker installation
-check_docker_installed() {
-  if ! command -v docker >/dev/null 2>&1; then
-    echo "ERROR: Docker is not installed. Please install docker and rerun."
-    exit 1
-  fi
-  if ! command -v docker-compose >/dev/null 2>&1; then
-    echo "ERROR: Docker Compose is not installed."
-    exit 1
-  fi
-}
-
-# Function to check Docker running status
-check_docker_running() {
-  if ! docker info >/dev/null 2>&1; then
-    echo "ERROR: The docker daemon is not running or accessible. Please start docker and rerun."
-    exit 1
-  fi
-}
-
-# Function to determine the architecture
-get_docker_architecture() {
-  local ARCH=""
-  SUPPORTED_PLATFORMS=("linux/amd64" "linux/arm64")
-  for PLATFORM in "${SUPPORTED_PLATFORMS[@]}"; do
-    if docker buildx ls | grep "$PLATFORM" >/dev/null 2>&1; then
-      ARCH=$(echo "${PLATFORM}" | cut -d '/' -f2)
-      echo "$ARCH" # Return the architecture
-      return 0     # Success
-    fi
-  done
-
-  # If no supported architecture is found, print an error and exit
-  echo "Unsupported Docker architecture." >&2
-  exit 1
-}
+# shellcheck source=/dev/null
+source validate_docker_status.sh
 
 download_hadoop_aws_jars() {
-
   if [ ! -d "$HADOOP_AWS_JARS_PATH" ]; then
-    echo "Downloading Hadoop AWS jar(s) ..."
     mkdir -p "$HADOOP_AWS_JARS_PATH"
-    HADOOP_VERSION=${HADOOP_VERSION:-3.3.4}
-    AWS_JAVA_SDK_BUNDLE_VERSION=${AWS_JAVA_SDK_BUNDLE_VERSION:-1.12.262}
+    if [ -f "$SOFTWARE_PATH/hadoop-${HADOOP_VERSION}.tar.gz" ]; then
+      tar -xf "$SOFTWARE_PATH/hadoop-${HADOOP_VERSION}.tar.gz" -C /tmp
+      cp -f "/tmp/hadoop-${HADOOP_VERSION}/share/hadoop/tools/lib/hadoop-aws-${HADOOP_VERSION}.jar" "$HADOOP_AWS_JARS_PATH/"
+      cp -f "/tmp/hadoop-${HADOOP_VERSION}"/share/hadoop/tools/lib/aws-java-sdk-bundle-*.jar "$HADOOP_AWS_JARS_PATH/"
+    else
+      echo "Downloading Hadoop AWS jar(s) ..."
+      AWS_JAVA_SDK_BUNDLE_VERSION=${AWS_JAVA_SDK_BUNDLE_VERSION:-1.12.262}
+      curl https://repo1.maven.org/maven2/com/amazonaws/aws-java-sdk-bundle/1.12.262/aws-java-sdk-bundle-1.12.262.jar \
+        -o "$HADOOP_AWS_JARS_PATH"/aws-java-sdk-bundle-1.12.262.jar
 
-    curl https://repo1.maven.org/maven2/com/amazonaws/aws-java-sdk-bundle/1.12.262/aws-java-sdk-bundle-1.12.262.jar \
-      -o "$HADOOP_AWS_JARS_PATH"/aws-java-sdk-bundle-1.12.262.jar
-
-    curl https://repo1.maven.org/maven2/org/apache/hadoop/hadoop-aws/3.3.4/hadoop-aws-3.3.4.jar \
-      -o "$HADOOP_AWS_JARS_PATH"/hadoop-aws-3.3.4.jar
+      curl https://repo1.maven.org/maven2/org/apache/hadoop/hadoop-aws/3.3.4/hadoop-aws-3.3.4.jar \
+        -o "$HADOOP_AWS_JARS_PATH"/hadoop-aws-3.3.4.jar
+    fi
   fi
 }
 
 download_db_connector_jars() {
-
   if [ ! -d "$DB_CONNECTOR_JARS_PATH" ]; then
     echo "Downloading DB connector jar(s) ..."
     mkdir -p "$DB_CONNECTOR_JARS_PATH"
@@ -91,13 +62,23 @@ download_db_connector_jars() {
   fi
 }
 
-check_docker_installed
-check_docker_running
+download_software_tars() {
+  mkdir -p "$SOFTWARE_PATH"
+  if [ ! -f "$SOFTWARE_PATH/hadoop-${HADOOP_VERSION}.tar.gz" ]; then
+    wget -P "$SOFTWARE_PATH" https://archive.apache.org/dist/hadoop/common/hadoop-${HADOOP_VERSION}/hadoop-${HADOOP_VERSION}.tar.gz
+  fi
+
+  if [ ! -f "$SOFTWARE_PATH/spark-${SPARK_VERSION}-bin-hadoop3.tgz" ]; then
+    wget -P "$SOFTWARE_PATH" https://dlcdn.apache.org/spark/spark-${SPARK_VERSION}/spark-${SPARK_VERSION}-bin-hadoop3.tgz
+  fi
+}
+
 ARCH=$(get_docker_architecture)
 
 sh download_and_build_hudi.sh
 sh download_flink_jars.sh
 
+download_software_tars
 download_hadoop_aws_jars
 download_db_connector_jars
 
@@ -109,7 +90,7 @@ build_docker_image() {
 
   version_arg=$(echo "${image_name}_VERSION" | tr '[:lower:]' '[:upper:]')
   local image_version_str="${version_arg//-/_}"
-  if docker build --build-arg "$image_version_str=$image_version" --platform linux/"$ARCH" -f "./Dockerfile.$dockerfile" . -t "$DOCKER_HUB_USERNAME/ranga-$image_name:$image_version" -t "$DOCKER_HUB_USERNAME/ranga-$image_name:latest"; then
+  if docker build --build-arg "$image_version_str=$image_version" --build-arg "HUDI_TARGET_DIR=$HUDI_TARGET_DIR" --platform linux/"$ARCH" -f "./Dockerfile.$dockerfile" . -t "$DOCKER_HUB_USERNAME/ranga-$image_name:$image_version" -t "$DOCKER_HUB_USERNAME/ranga-$image_name:latest"; then
     echo "Successfully built $image_name:$image_version"
   else
     echo "Failed to build $image_name:$image_version"

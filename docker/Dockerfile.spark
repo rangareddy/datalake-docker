@@ -1,6 +1,9 @@
 FROM python:3.10-bullseye
 
-LABEL maintainer="Ranga Reddy"
+SHELL ["/bin/bash", "-c"]
+
+LABEL maintainer="Ranga Reddy <rangareddy.avula@gmail.com>"
+LABEL description="Datalake Spark image"
 
 RUN set -ex; \
   apt-get update && \
@@ -20,21 +23,26 @@ ENV SPARK_VERSION=${SPARK_VERSION:-3.5.3} \
   SPARK_LOG_DIR=${SPARK_LOG_DIR:-/var/log/spark} \
   HUDI_HOME=${HUDI_HOME:-/opt/hudi}
 
-RUN mkdir -p ${SPARK_HOME}/spark-events && mkdir -p $SPARK_LOG_DIR && chmod 755 $SPARK_LOG_DIR \
-  && curl https://dlcdn.apache.org/spark/spark-${SPARK_VERSION}/spark-${SPARK_VERSION}-bin-hadoop3.tgz -o spark-${SPARK_VERSION}-bin-hadoop3.tgz \
-  && tar xvzf spark-${SPARK_VERSION}-bin-hadoop3.tgz --directory ${SPARK_HOME} --strip-components 1 \
-  && rm -rf spark-${SPARK_VERSION}-bin-hadoop3.tgz && \
-  curl https://repo1.maven.org/maven2/com/amazonaws/aws-java-sdk-bundle/1.12.262/aws-java-sdk-bundle-1.12.262.jar \
-  -o ${SPARK_HOME}/jars/aws-java-sdk-bundle-1.12.262.jar && \
-  curl https://repo1.maven.org/maven2/org/apache/hadoop/hadoop-aws/3.3.4/hadoop-aws-3.3.4.jar \
-  -o ${SPARK_HOME}/jars/hadoop-aws-3.3.4.jar
+COPY software/spark-${SPARK_VERSION}-bin-hadoop3.tgz /tmp/spark-${SPARK_VERSION}-bin-hadoop3.tgz
+
+RUN mkdir -p ${SPARK_HOME} && \
+  tar xzf /tmp/spark-${SPARK_VERSION}-bin-hadoop3.tgz --directory ${SPARK_HOME} --strip-components 1 && \
+  rm -rf /tmp/spark-${SPARK_VERSION}-bin-hadoop3.tgz
+
+RUN mkdir -p ${SPARK_HOME}/spark-events && mkdir -p $SPARK_LOG_DIR && chmod 755 $SPARK_LOG_DIR && mkdir -p $HUDI_HOME
 
 ENV PATH="${SPARK_HOME}/sbin:${SPARK_HOME}/bin:${PATH}"
 
+COPY hadoop-s3-jars/* $SPARK_HOME/lib/
 COPY db_connector_jars/* $SPARK_HOME/lib/
+
+ARG HUDI_TARGET_DIR=$HUDI_TARGET_DIR
+COPY $HUDI_TARGET_DIR/hudi-spark-bundle/target/* $HUDI_HOME/
+COPY $HUDI_TARGET_DIR/hudi-utilities-slim-bundle/target/* $HUDI_HOME/
+COPY $HUDI_TARGET_DIR/hudi-hive-sync-bundle/target/* $HUDI_HOME/
+
 COPY conf/spark/* $SPARK_CONF/
 COPY conf/hadoop/core-site.xml $SPARK_CONF/
-COPY hudi_1_0_0 $HUDI_HOME
 COPY scripts/spark/entrypoint.sh /opt/entrypoint.sh
 COPY check_service_status_utility.sh /opt/check_service_status_utility.sh
 

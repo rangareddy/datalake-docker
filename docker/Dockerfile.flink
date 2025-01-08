@@ -5,25 +5,81 @@ ARG JAVA_VERSION=${JAVA_VERSION:-11}
 
 FROM flink:${FLINK_VERSION}-scala_${SCALA_VERSION}-java${JAVA_VERSION}
 
+SHELL ["/bin/bash", "-c"]
+
+LABEL maintainer="Ranga Reddy <rangareddy.avula@gmail.com>"
+LABEL description="Datalake Flink image"
+
 ENV FLINK_HOME=${FLINK_HOME:-/opt/flink} \
     FLINK_LIB=$FLINK_HOME/lib/ \
     FLINK_CONF=$FLINK_HOME/conf \
     FLINK_VERSION=${FLINK_VERSION:-1.17.2} \
     FLINK_MAJOR_VERSION=${FLINK_MAJOR_VERSION:-1.17} \
-    SCALA_VERSION=${SCALA_VERSION:-2.12}
+    SCALA_VERSION=${SCALA_VERSION:-2.12} \
+    IS_AWS_ENABLED=${IS_AWS_ENABLED:-true} \
+    DEBIAN_FRONTEND=noninteractive
 
 # Install dependencies
 RUN set -ex; \
     apt-get update; \
-    apt-get install -y vim curl python3 python3-pip python3-dev; \
+    apt-get install -y vim curl python3 python3-pip python3-dev openssh-client; \
     rm -rf /var/lib/apt/lists/*
 
-RUN ln -s /usr/bin/python3 /usr/bin/python
+RUN ln -s /usr/bin/python3 /usr/bin/python && \
+    pip3 install awscli; \
+    ssh-keygen -f ~/.ssh/id_rsa -t rsa -N ''; \
+    cat ~/.ssh/id_rsa.pub >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/*
+
+ARG HADOOP_VERSION=${HADOOP_VERSION:-3.3.4}
+ARG HADOOP_HOME=${HADOOP_HOME:-/opt/hadoop}
+ARG SCALA_VERSION=${SCALA_VERSION:-2.12}
+
+ENV HADOOP_VERSION=$HADOOP_VERSION \
+    HADOOP_HOME=$HADOOP_HOME \
+    PATH=$HADOOP_HOME/bin/:$PATH \
+    HADOOP_CONF_DIR=/etc/hadoop \
+    HADOOP_CLASSPATH=$HADOOP_HOME/etc/hadoop:$HADOOP_HOME/share/hadoop/common/lib/*:$HADOOP_HOME/share/hadoop/common/*:$HADOOP_HOME/share/hadoop/hdfs:$HADOOP_HOME/share/hadoop/hdfs/lib/*:$HADOOP_HOME/share/hadoop/hdfs/*:$HADOOP_HOME/share/hadoop/mapreduce/*:$HADOOP_HOME/share/hadoop/yarn:$HADOOP_HOME/share/hadoop/yarn/lib/*:$HADOOP_HOME/share/hadoop/yarn/*
+
+COPY software/hadoop-${HADOOP_VERSION}.tar.gz /tmp/hadoop.tar.gz
+
+RUN set -x \
+    && tar -xvf /tmp/hadoop.tar.gz -C /opt/ \
+    && mv /opt/hadoop-$HADOOP_VERSION $HADOOP_HOME \
+    && rm /tmp/hadoop.tar.gz* && \
+    ln -sf $HADOOP_HOME/etc/hadoop $HADOOP_CONF_DIR && \
+    mkdir -p $HADOOP_HOME/logs && mkdir -p /hadoop-data
 
 COPY conf/flink/* $FLINK_CONF/
 COPY conf/hadoop/core-site.xml $FLINK_CONF/
-COPY flink-lib/* $FLINK_LIB
+COPY lib/* $FLINK_LIB
 
-#RUN echo "Add Flink S3 Plugin" && \
-#    mkdir -p $FLINK_HOME/plugins/s3-fs-hadoop && \
-#    cp $FLINK_LIB/hadoop/flink-s3-fs-hadoop-$FLINK_VERSION.jar $FLINK_HOME/plugins/s3-fs-hadoop/
+ARG HUDI_TARGET_DIR=$HUDI_TARGET_DIR
+COPY $HUDI_TARGET_DIR/hudi-flink-bundle/target/* $FLINK_LIB
+
+RUN ln -fs ${HADOOP_HOME}/share/hadoop/tools/lib/hadoop-aws-${HADOOP_VERSION}.jar $FLINK_LIB/hadoop-aws.jar && \
+    ln -fs ${HADOOP_HOME}/share/hadoop/tools/lib/aws-java-sdk-bundle-*.jar $FLINK_LIB/aws-java-sdk-bundle.jar && \
+    ln -fs ${HADOOP_HOME}/share/hadoop/hdfs/hadoop-hdfs-client-${HADOOP_VERSION}.jar $FLINK_LIB/hadoop-hdfs-client.jar
+
+RUN ln -fs $FLINK_HOME/opt/flink-queryable-state-runtime-*.jar $FLINK_HOME/lib/.
+
+RUN mkdir -p $FLINK_HOME/plugins/flink-s3-fs-hadoop && \
+    ln -fs $FLINK_HOME/opt/flink-s3-fs-hadoop-${FLINK_VERSION}.jar $FLINK_HOME/plugins/flink-s3-fs-hadoop/flink-s3-fs-hadoop-${FLINK_VERSION}.jar
+
+#RUN mv $FLINK_HOME/opt/flink-table-planner_${SCALA_VERSION}-${FLINK_VERSION}.jar $FLINK_HOME/lib/flink-table-planner_${SCALA_VERSION}-${FLINK_VERSION}.jar && \
+#    mv $FLINK_HOME/lib/flink-table-planner-loader-${FLINK_VERSION}.jar $FLINK_HOME/opt/flink-table-planner-loader-${FLINK_VERSION}.jar
+
+RUN if [ "${IS_AWS_ENABLED}" = "true" ]; then \
+    AWS_DEFAULT_PROFILE="default"; \
+    AWS_ACCESS_KEY_ID=admin; \
+    AWS_SECRET_ACCESS_KEY=password; \
+    AWS_ENDPOINT_URL=http://minio:9000; \
+    AWS_REGION=us-east-1; \
+    aws configure set profile $AWS_DEFAULT_PROFILE; \
+    aws configure set profile.$AWS_DEFAULT_PROFILE.aws_access_key_id "${AWS_ACCESS_KEY_ID}"; \
+    aws configure set profile.$AWS_DEFAULT_PROFILE.aws_secret_access_key "${AWS_SECRET_ACCESS_KEY}"; \
+    aws configure set profile.$AWS_DEFAULT_PROFILE.region "${AWS_REGION}"; \
+    aws configure set profile.$AWS_DEFAULT_PROFILE.endpoint_url "${AWS_ENDPOINT_URL}"; \
+    fi
+
+# Install PyFlink
+#RUN pip3 install apache-flink==$FLINK_VERSION

@@ -1,7 +1,11 @@
 ARG KAFKA_CONNECT_VERSION=${KAFKA_CONNECT_VERSION:-7.4.7}
 FROM confluentinc/cp-server-connect-base:$KAFKA_CONNECT_VERSION
 
-LABEL maintainer="Ranga Reddy"
+SHELL ["/bin/bash", "-c"]
+
+LABEL maintainer="Ranga Reddy <rangareddy.avula@gmail.com>"
+LABEL description="Datalake Kafka Connect image"
+
 USER root
 
 RUN set -ex; \
@@ -33,7 +37,8 @@ RUN mkdir -p $CONNECTORS_PATH && mkdir -p $DATA_PATH && mkdir -p $HUDI_KAFKA_CON
 	cp -r /usr/share/confluent-hub-components/confluentinc-kafka-connect-hdfs3/lib $HUDI_KAFKA_CONNECTOR_PATH/lib
 
 COPY hadoop-s3-jars/* $HUDI_KAFKA_CONNECTOR_PATH/
-COPY hudi_0_15_0/packaging/hudi-kafka-connect-bundle/target/hudi-kafka-connect-bundle-*.jar $HUDI_KAFKA_CONNECTOR_PATH/
+ARG HUDI_TARGET_DIR=$HUDI_TARGET_DIR
+COPY $HUDI_TARGET_DIR/hudi-kafka-connect-bundle/target/* $HUDI_KAFKA_CONNECTOR_PATH/
 
 RUN git clone https://github.com/rangareddy/hudi-kafka-connect-demo.git $DATA_PATH/hudi-kafka-connect-demo && \
 	chown appuser:root -R $CONNECTORS_PATH $DATA_PATH

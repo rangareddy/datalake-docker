@@ -1,39 +1,47 @@
 jobmanager.memory.process.size: 1600Mb
 jobmanager.heap.size: 1024m
 
+rest.port: 8084
+rest.bind-port: 8084
 jobmanager.rpc.port: 6123
-blob.server.port: 6124
-query.server.port: 6125
 taskmanager.rpc.port: 6122
+taskmanager.data.port: 6121
+blob.server.port: 6124
+metrics.internal.query-service.port: 6126
 
 taskmanager.heap.size: 1024m
 taskmanager.memory.process.size: 2048m
 taskmanager.numberOfTaskSlots: 4
 parallelism.default: 4
 
-execution.checkpointing.interval: 30s
+execution.checkpointing.interval: 60s
+execution.checkpointing.tolerable-failed-checkpoints: 10
 execution.checkpointing.mode: EXACTLY_ONCE
-state.backend: filesystem
+state.backend.type: hashmap
 state.checkpoints.dir: file:///tmp/flink-checkpoints-directory
 state.checkpoints.num-retained: 10
 state.savepoints.dir: file:///tmp/flink-savepoints-directory
 
+akka.ask.timeout: 300s
 heartbeat.interval: 5000
 heartbeat.timeout: 8000
 web.backpressure.refresh-interval: 10000
 rest.flamegraph.enabled: true
 
+# S3/Minio access key and secret
 s3.access-key: admin
 s3.secret-key: password
 s3.endpoint: http://minio:9000
-s3.path-style-access: true
 s3.path.style.access: true
-s3.aws.credentials.provider: com.amazonaws.auth.EnvironmentVariableCredentialsProvider
+s3.ssl.enabled: false
+s3.fs.impl: org.apache.hadoop.fs.s3a.S3AFileSystem
+s3.aws.credentials.provider: org.apache.hadoop.fs.s3a.SimpleAWSCredentialsProvider
 
-#s3.aws.credentials.provider: org.apache.hadoop.fs.s3a.SimpleAWSCredentialsProvider
-#s3.connection.ssl.enabled: false
-#s3.ssl.enabled: false
+fs.s3a.access.key: admin
+fs.s3a.secret.key: password
+fs.s3a.endpoint: http://minio:9000
+fs.s3a.path.style.access: true
 
-restart-strategy: fixed-delay
+restart-strategy.type: fixed-delay
 restart-strategy.fixed-delay.attempts: 3
 restart-strategy.fixed-delay.delay: 10 s

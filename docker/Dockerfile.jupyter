@@ -1,13 +1,15 @@
 ARG JUPYTER_VERSION=${JUPYTER_VERSION:-latest}
 FROM jupyter/base-notebook:$JUPYTER_VERSION
 
-LABEL maintainer="Ranga Reddy"
+SHELL ["/bin/bash", "-c"]
 
-SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+LABEL maintainer="Ranga Reddy <rangareddy.avula@gmail.com>"
+LABEL description="Datalake Jupyter image"
 
 USER root
 
-ENV DEBIAN_FRONTEND=noninteractive
+ENV DEBIAN_FRONTEND=noninteractive \
+  JARS_PATH=/opt/jars
 
 # Install any necessary packages
 RUN set -ex; \
@@ -31,16 +33,11 @@ RUN curl -s https://github.com/SpencerPark/IJava/releases/download/v1.3.0/ijava-
   && python3 install.py --sys-prefix \
   && rm ijava-1.3.0.zip
 
-RUN mkdir -p /home/jovyan/data /opt/jars && \
-  curl https://repo1.maven.org/maven2/com/amazonaws/aws-java-sdk-bundle/1.12.262/aws-java-sdk-bundle-1.12.262.jar \
-  -o /opt/jars/aws-java-sdk-bundle-1.12.262.jar && \
-  curl https://repo1.maven.org/maven2/org/apache/hadoop/hadoop-aws/3.3.4/hadoop-aws-3.3.4.jar \
-  -o /opt/jars/hadoop-aws-3.3.4.jar && \
-  fix-permissions /home/$NB_USER && \
-  fix-permissions /opt/jars
+RUN mkdir -p /home/$NB_USER/data $JARS_PATH
+COPY hadoop-s3-jars/* $JARS_PATH
+RUN fix-permissions /home/$NB_USER && fix-permissions $JARS_PATH
 
 WORKDIR $HOME
-
 USER $NB_UID
 
 # Set the entrypoint to start JupyterLab
