@@ -23,5 +23,3 @@ docker/hadoop-s3-jars
 docker/db_connector_jars
 docker/software
 docker/lib/
-
-old_files

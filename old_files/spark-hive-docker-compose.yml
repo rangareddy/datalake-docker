@@ -1,0 +1,159 @@
+services:
+
+  postgres:
+    image: postgres:${POSTGRES_VERSION:-16.4}
+    restart: always
+    container_name: postgres
+    hostname: postgres
+    ports:
+      - '5432:5432'
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-postgres}
+    command: ['postgres', '-c', 'wal_level=logical']
+    healthcheck:
+      test: ['CMD', 'psql', '-U', 'postgres', '-c', 'SELECT 1']
+      interval: 20s
+      timeout: 20s
+      retries: 3
+    volumes:
+      - ./db_scripts/postgres/hive_db_init.sql:/docker-entrypoint-initdb.d/hive_db_init.sql
+      - ./db_scripts/postgres/customers_data.sql:/docker-entrypoint-initdb.d/customers_data.sql
+      - ./data/postgres-data:/var/lib/postgresql/data
+    networks:
+      - my_network
+
+  hive-metastore:
+    image: datalake-hive:${DATALAKE_VERSION:-1.0.0}
+    container_name: hive-metastore
+    hostname: hive-metastore
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    ports:
+      - "9083:9083"
+    healthcheck:
+      test: bash -c "exec 6<> /dev/tcp/localhost/9083"
+      interval: 20s
+      timeout: 20s
+      retries: 3
+    environment:
+      DB_DRIVER: postgres
+      SERVICE_NAME: 'metastore'
+      VERBOSE: 'true'
+    networks:
+      - my_network
+
+  hive-server:
+    image: datalake-hive:${DATALAKE_VERSION:-1.0.0}
+    hostname: hive-server
+    container_name: hive-server
+    depends_on:
+      hive-metastore:
+        condition: service_healthy
+    ports:
+      - 10000:10000
+      - 10002:10002
+    environment:
+      SERVICE_NAME: hiveserver2
+      IS_RESUME: "true"
+      HIVE_SERVER2_THRIFT_PORT: 10000
+    networks:
+      - my_network
+
+  spark-master:
+    image: datalake-spark:${DATALAKE_VERSION:-1.0.0}
+    container_name: spark-master
+    hostname: spark-master
+    user: root
+    depends_on:
+      hive-metastore:
+        condition: service_healthy
+    volumes:
+      - ./data/spark-events:/tmp/spark-events
+    environment:
+      - SPARK_MODE=master
+      - SPARK_MASTER_HOST=spark-master
+      - SPARK_MASTER_WEBUI_PORT=8080
+      - SPARK_MASTER_PORT=7077
+    healthcheck:
+      test: bash -c "exec 6<> /dev/tcp/localhost/8080"
+      start_period: 10s
+      interval: 20s
+      timeout: 20s
+      retries: 3
+    ports:
+      - "8080:8080"
+      - "7077:7077"
+      - "14040-14042:4040-4042"
+    networks:
+      - my_network
+
+  spark-worker:
+    image: datalake-spark:${DATALAKE_VERSION:-1.0.0}
+    container_name: spark-worker
+    hostname: spark-worker
+    depends_on:
+      spark-master:
+        condition: service_healthy
+    ports:
+      - 8081:8081
+    environment:
+      - SPARK_MODE=worker
+      - SPARK_MASTER_URL=spark://spark-master:7077
+      - SPARK_WORKER_CORES=2
+      - SPARK_WORKER_MEMORY=4G
+      - SPARK_WORKER_WEBUI_PORT=8081
+    networks:
+      - my_network
+
+  minio:
+    image: minio/minio
+    container_name: minio
+    hostname: minio
+    environment:
+      - MINIO_ROOT_USER=admin
+      - MINIO_ROOT_PASSWORD=password
+      - MINIO_DOMAIN=minio
+    volumes:
+      - ./data/minio:/data
+    networks:
+      my_network:
+        aliases:
+          - warehouse.minio
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    command: [ "server", "/data", "--console-address", ":9001" ]
+    healthcheck:
+      test: timeout 5s bash -c ':> /dev/tcp/127.0.0.1/9000' || exit 1
+      start_period: 5s
+      interval: 20s
+      timeout: 20s
+      retries: 3
+
+  mc:
+    image: minio/mc
+    container_name: mc
+    hostname: mc
+    environment:
+      - AWS_ACCESS_KEY_ID=admin
+      - AWS_SECRET_ACCESS_KEY=password
+      - AWS_REGION=us-east-1
+    entrypoint: >
+      /bin/sh -c " until (/usr/bin/mc config host add minio http://minio:9000 admin password) 
+      do echo '...waiting...' && sleep 1; done; 
+      /usr/bin/mc mb minio/warehouse; 
+      /usr/bin/mc policy set public minio/warehouse; 
+      tail -f /dev/null "  
+    depends_on:
+      minio:
+        condition: service_healthy
+    networks:
+      - my_network
+
+networks:
+  my_network:
