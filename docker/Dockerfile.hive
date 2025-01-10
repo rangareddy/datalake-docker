@@ -9,7 +9,7 @@ LABEL description="Datalake Hive image"
 USER root
 
 RUN apt-get update && \
-	apt-get install curl -y telnet vim jq && \
+	apt-get install curl -y telnet vim jq net-tools && \
 	mkdir -p /home/hive/.beeline && \
 	chown hive /home/hive/.beeline
 
@@ -24,6 +24,6 @@ COPY conf/hive/* $HIVE_HOME/conf/
 COPY db_connector_jars/* $HIVE_HOME/lib/
 
 ARG HUDI_TARGET_DIR=$HUDI_TARGET_DIR
-COPY $HUDI_TARGET_DIR/hudi-hadoop-mr-bundle/target/* $HIVE_HOME/lib/
+COPY $HUDI_TARGET_DIR/hudi-hadoop-mr-bundle/* $HIVE_HOME/lib/
 
 USER hive

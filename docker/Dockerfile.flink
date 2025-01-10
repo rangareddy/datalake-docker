@@ -54,7 +54,7 @@ COPY conf/hadoop/core-site.xml $FLINK_CONF/
 COPY lib/* $FLINK_LIB
 
 ARG HUDI_TARGET_DIR=$HUDI_TARGET_DIR
-COPY $HUDI_TARGET_DIR/hudi-flink-bundle/target/* $FLINK_LIB
+COPY $HUDI_TARGET_DIR/hudi-flink-bundle/* $FLINK_LIB
 
 RUN ln -fs ${HADOOP_HOME}/share/hadoop/tools/lib/hadoop-aws-${HADOOP_VERSION}.jar $FLINK_LIB/hadoop-aws.jar && \
     ln -fs ${HADOOP_HOME}/share/hadoop/tools/lib/aws-java-sdk-bundle-*.jar $FLINK_LIB/aws-java-sdk-bundle.jar && \

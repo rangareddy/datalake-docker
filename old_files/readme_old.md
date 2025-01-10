@@ -1659,3 +1659,80 @@ CREATE CATALOG postgresql_catalog WITH (
   'password' = 'postgres'
 );
 ```
+
+## Spark Python Hudi
+
+```sh
+pyspark \
+--jars $HUDI_HOME/hudi-spark3.5-bundle_2.12-1.0.0-rc1.jar \
+--conf 'spark.serializer=org.apache.spark.serializer.KryoSerializer' \
+--conf 'spark.sql.catalog.spark_catalog=org.apache.spark.sql.hudi.catalog.HoodieCatalog' \
+--conf 'spark.sql.extensions=org.apache.spark.sql.hudi.HoodieSparkSessionExtension' \
+--conf 'spark.kryo.registrator=org.apache.spark.HoodieSparkKryoRegistrar'
+```
+
+```python
+from pyspark.sql import SparkSession
+from pyspark.sql.types import StructType, StructField, StringType, IntegerType
+
+schema = StructType([
+    StructField("id", StringType(), nullable=False, metadata={"comment": "Unique identifier"}),
+    StructField("name", StringType(), nullable=True, metadata={"comment": "Name of the person"}),
+    StructField("age", IntegerType(), nullable=True, metadata={"comment": "Age of the person"}),
+    StructField("date", StringType(), nullable=True, metadata={"comment": "Partition field, date of entry"})  # Partition field
+])
+
+data = [
+    ("1", "John", 30, "2023-01-01"),
+    ("2", "Jane", 25, "2023-01-01"),
+    ("3", "Bob", 35, "2023-01-02")
+]
+
+df = spark.createDataFrame(data, schema=schema)
+
+databaseName = "default"
+tableName = "Hudi_Table_With_Commentss"
+tablePath = f"s3a://warehouse/{databaseName}/{tableName}"
+
+hudi_options = {
+    'hoodie.table.name': tableName,
+    'hoodie.database.name': databaseName,
+    "hoodie.datasource.write.table.name": tableName,
+    'hoodie.datasource.write.operation': 'insert',
+    'hoodie.datasource.write.partitionpath.field': 'date',
+    'hoodie.datasource.write.precombine.field': 'id',
+    'hoodie.datasource.write.recordkey.field': 'id',
+    'hoodie.datasource.write.schema.allow.auto.evolution.column.drop': 'true',
+    'hoodie.datasource.hive_sync.database': databaseName,
+    'hoodie.datasource.hive_sync.table': tableName,
+    'hoodie.datasource.hive_sync.enable': 'true',
+    'hoodie.datasource.hive_sync.partition_extractor_class': 'org.apache.hudi.hive.MultiPartKeysValueExtractor',
+    'hoodie.datasource.hive_sync.partition_fields': 'date',
+    'hoodie.datasource.hive_sync.sync_comment': 'true',
+    "hoodie.datasource.hive_sync.mode": "hms",
+    "hoodie.datasource.hive_sync.support_timestamp": "true",
+    "hoodie.datasource.hive_sync.use_jdbc": "false",
+    "hoodie.merge.allow.duplicate.on.inserts": "false",
+    "hoodie.schema.on.read.enable": "true",
+}
+
+df.write.format("hudi").options(**hudi_options).mode("overwrite").save(tablePath)
+
+spark.read.format("hudi").load(tablePath).show(20, False)
+
+df.write.mode("overwrite").saveAsTable("Hive_Table_With_Comments")
+```
+
+## Spark Scala Hudi
+
+```sh
+ spark-shell --jars $HUDI_HOME/hudi-spark3.5-bundle_2.12-1.0.0-rc1.jar \
+--conf 'spark.serializer=org.apache.spark.serializer.KryoSerializer' \
+--conf 'spark.sql.catalog.spark_catalog=org.apache.spark.sql.hudi.catalog.HoodieCatalog' \
+--conf 'spark.sql.extensions=org.apache.spark.sql.hudi.HoodieSparkSessionExtension' \
+--conf 'spark.kryo.registrator=org.apache.spark.HoodieSparkKryoRegistrar'
+```
+
+```scala
+
+```

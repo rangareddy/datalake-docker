@@ -61,9 +61,8 @@ copy_target_jar_file_to_target_dir() {
                 local filename
                 filename=$(basename "$target_file")
                 if [[ "$filename" != *sources* && "$filename" != *tests* && "$filename" != *original* ]]; then
-                    output_target_dir="${output_dir}/target"
-                    mkdir -p "$output_target_dir"
-                    cp "$target_file" "$output_target_dir"
+                    mkdir -p "$output_dir"
+                    cp "$target_file" "$output_dir"
                 fi
             fi
         done
@@ -75,6 +74,11 @@ copy_target_jar_file_to_target_dir() {
             local my_current_dir
             my_current_dir=$(basename "$subdir")
             copy_target_jar_file_to_target_dir "$subdir" "$output_dir/$my_current_dir" # Recursive call
+        else
+            if [[ "$current_dir" != *target* && "$current_dir" != *src* && "$subdir" != *pom.xml* && "$subdir" != *bundle-validation* && "$subdir" != *README.md* ]]; then
+                mkdir -p $output_dir
+                cp -f "$subdir" "$output_dir"
+            fi
         fi
     done
 }

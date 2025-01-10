@@ -67,6 +67,7 @@
         <name>metastore.warehouse.dir</name>
         <value>s3a://warehouse/</value>
     </property>
+    <!--
     <property>
         <name>local.tmp.dir</name>
         <value>s3a://tmp/hive</value>
@@ -99,6 +100,7 @@
         <name>hive.query.results.cache.directory</name>
         <value>${local.tmp.dir}/_resultscache_</value>
     </property>
+    -->
     <property>
         <name>javax.jdo.option.ConnectionDriverName</name>
         <value>org.postgresql.Driver</value>
