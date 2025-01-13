@@ -265,6 +265,8 @@ services:
     depends_on:
       hive-metastore:
         condition: service_healthy
+    env_file:
+      - aws.env
     environment:
       - SPARK_MODE=master
     ports:
@@ -293,6 +295,8 @@ services:
     depends_on:
       spark-master:
         condition: service_healthy
+    env_file:
+      - aws.env
     environment:
       - SPARK_MODE=worker
       - SPARK_MASTER_HOST=spark-master

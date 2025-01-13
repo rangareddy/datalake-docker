@@ -39,10 +39,13 @@ COPY hadoop-s3-jars/* $SPARK_HOME/jars/
 COPY db_connector_jars/* $SPARK_HOME/jars/
 
 ARG HUDI_TARGET_DIR=$HUDI_TARGET_DIR
-COPY $HUDI_TARGET_DIR/hudi-spark-bundle/* $HUDI_HOME/
-COPY $HUDI_TARGET_DIR/hudi-utilities-slim-bundle/* $HUDI_HOME/
-COPY $HUDI_TARGET_DIR/hudi-hive-sync-bundle/* $HUDI_HOME/
-COPY $HUDI_TARGET_DIR/hudi-cli-bundle/* $HUDI_HOME/
+COPY $HUDI_TARGET_DIR/hudi-spark-bundle $HUDI_HOME/hudi-spark-bundle
+COPY $HUDI_TARGET_DIR/hudi-utilities-slim-bundle $HUDI_HOME/hudi-utilities-slim-bundle
+COPY $HUDI_TARGET_DIR/hudi-hive-sync-bundle $HUDI_HOME/hudi-hive-sync-bundle
+COPY $HUDI_TARGET_DIR/hudi-cli-bundle $HUDI_HOME/hudi-cli-bundle
+
+RUN echo "export CLI_BUNDLE_JAR=$(ls "$HUDI_HOME"/hudi-cli-bundle/hudi-cli-bundle*.jar)" >> /root/.bashrc
+RUN echo "export SPARK_BUNDLE_JAR=$(ls "$HUDI_HOME"/hudi-spark-bundle/hudi-spark*-bundle*.jar)" >> /root/.bashrc
 
 COPY conf/spark/* $SPARK_CONF/
 COPY conf/hadoop/core-site.xml $SPARK_CONF/
