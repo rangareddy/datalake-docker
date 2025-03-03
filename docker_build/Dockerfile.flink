@@ -70,10 +70,10 @@ RUN mkdir -p $FLINK_HOME/plugins/flink-s3-fs-hadoop && \
 
 RUN if [ "${IS_AWS_ENABLED}" = "true" ]; then \
     AWS_DEFAULT_PROFILE="default"; \
-    AWS_ACCESS_KEY_ID=admin; \
-    AWS_SECRET_ACCESS_KEY=password; \
-    AWS_ENDPOINT_URL=http://minio:9000; \
-    AWS_REGION=us-east-1; \
+    AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-admin}; \
+    AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-password}; \
+    AWS_ENDPOINT_URL=${AWS_ENDPOINT_URL:-"http://minio:9000"}; \
+    AWS_REGION=${AWS_REGION:-us-east-1}; \
     aws configure set profile $AWS_DEFAULT_PROFILE; \
     aws configure set profile.$AWS_DEFAULT_PROFILE.aws_access_key_id "${AWS_ACCESS_KEY_ID}"; \
     aws configure set profile.$AWS_DEFAULT_PROFILE.aws_secret_access_key "${AWS_SECRET_ACCESS_KEY}"; \
@@ -82,4 +82,4 @@ RUN if [ "${IS_AWS_ENABLED}" = "true" ]; then \
     fi
 
 # Install PyFlink
-#RUN pip3 install apache-flink==$FLINK_VERSION
+RUN pip3 install apache-flink==$FLINK_VERSION

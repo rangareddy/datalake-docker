@@ -1,12 +1,13 @@
 pyspark==3.5.3
 awscli==1.36.27
 spylon-kernel==0.4.1
+jupyter==1.1.1
 jupysql==0.10.16
 matplotlib==3.10.0
 scipy==1.14.1
 duckdb-engine==0.14.0
-hudi==0.2
+hudi==0.2.0
 pyiceberg[pyarrow,duckdb,pandas]==0.8.1
-delta-spark==3.2.1
-deltalake==0.22.3
-s3fs
+delta-spark==3.3.0
+deltalake==0.23.2
+s3fs==2024.12.0

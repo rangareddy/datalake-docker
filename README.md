@@ -93,14 +93,14 @@ curl -X POST -H "Accept:application/json" -H "Content-Type:application/json" loc
 To verify that the connector has been created successfully, run:
 
 ```sh
-curl -s -X GET http://localhost:8083/connectors/inventory_employees_postgres_connector | jq
+curl -s -X GET http://localhost:8083/connectors/employees_pg_connector | jq
 ```
 
 You should see output similar to:
 
 ```json
 {
-  "name": "inventory_employees_postgres_connector",
+  "name": "employees_pg_connector",
   "config": {
     "connector.class": "io.debezium.connector.postgresql.PostgresConnector",
     "publication.autocreate.mode": "filtered",
@@ -109,22 +109,23 @@ You should see output similar to:
     "slot.name": "debezium",
     "publication.name": "dbz_publication",
     "database.server.name": "postgres",
-    "schema.include.list": "inventory",
+    "schema.include.list": "public",
     "plugin.name": "pgoutput",
     "database.port": "5432",
     "tombstones.on.delete": "false",
     "value.converter.schema.registry.url": "http://kafka-schema-registry:8081/",
-    "topic.prefix": "fulfillment",
+    "topic.prefix": "cdc",
     "database.hostname": "postgres",
     "database.password": "postgres",
-    "name": "inventory_employees_postgres_connector",
+    "name": "employees_pg_connector",
+    "table.include.list": "public.employees",
     "value.converter": "io.confluent.connect.avro.AvroConverter",
     "key.converter": "io.confluent.connect.avro.AvroConverter",
     "key.converter.schema.registry.url": "http://kafka-schema-registry:8081/"
   },
   "tasks": [
     {
-      "connector": "inventory_employees_postgres_connector",
+      "connector": "employees_pg_connector",
       "task": 0
     }
   ],
@@ -135,12 +136,12 @@ You should see output similar to:
 To check that the connector is running, execute:
 
 ```sh
-$ curl -s -X GET http://localhost:8083/connectors/inventory_employees_postgres_connector/status | jq
+$ curl -s -X GET http://localhost:8083/connectors/employees_pg_connector/status | jq
 ```
 
 ```json
 {
-  "name": "inventory_employees_postgres_connector",
+  "name": "employees_pg_connector",
   "connector": {
     "state": "RUNNING",
     "worker_id": "kafka-connect:8083"
@@ -200,9 +201,9 @@ Add the following configuration:
 bootstrap.servers=kafka:29092
 auto.offset.reset=earliest
 schema.registry.url=http://kafka-schema-registry:8081
-hoodie.deltastreamer.schemaprovider.registry.url=http://kafka-schema-registry:8081/subjects/fulfillment.inventory.employees-value/versions/latest
+hoodie.deltastreamer.schemaprovider.registry.url=http://kafka-schema-registry:8081/subjects/cdc.public.employees-value/versions/latest
 hoodie.deltastreamer.source.kafka.value.deserializer.class=io.confluent.kafka.serializers.KafkaAvroDeserializer
-hoodie.deltastreamer.source.kafka.topic=fulfillment.inventory.employees
+hoodie.deltastreamer.source.kafka.topic=cdc.public.employees
 hoodie.datasource.write.recordkey.field=id
 hoodie.datasource.write.schema.allow.auto.evolution.column.drop=true
 hoodie.datasource.write.keygenerator.class=org.apache.hudi.keygen.NonpartitionedKeyGenerator

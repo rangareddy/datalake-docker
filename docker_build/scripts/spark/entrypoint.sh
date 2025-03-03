@@ -53,6 +53,21 @@ start_spark_history_server() {
   echo "Spark History Server started on ${SPARK_HISTORY_UI_PORT}."
 }
 
+# Function to start Notebook
+start_jupyter() {
+  export PYSPARK_DRIVER_PYTHON=jupyter
+  export PYSPARK_DRIVER_PYTHON_OPTS="notebook"
+  echo "Starting the Jupyter Lab..."
+  nohup jupyter-lab --ip=0.0.0.0 --port=8888 --no-browser --allow-root --NotebookApp.token='' 2>&1 &
+  sleep 3
+  if [ -n "$(pgrep -f 'jupyter-lab')" ]; then
+    echo "Jupyter Lab started successfully."
+  else
+    echo "ERROR: Jupyter Lab failed to start."
+    exit 1
+  fi
+}
+
 if [ "$SPARK_MODE" == "master" ]; then
   start_spark_master
   start_spark_history_server

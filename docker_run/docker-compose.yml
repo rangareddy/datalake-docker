@@ -272,7 +272,7 @@ services:
     ports:
       - "8080:8080"
       - "7077:7077"
-      - "4040-4042:4040-4042"
+      - "14040-14042:4040-4042"
       - "18080:18080"
     volumes:
       - ./data/spark-events:/opt/spark/spark-events
@@ -405,18 +405,15 @@ services:
     depends_on:
       minio:
         condition: service_healthy
-    environment:
-      - AWS_ACCESS_KEY_ID=admin
-      - AWS_SECRET_ACCESS_KEY=password
-      - AWS_REGION=us-east-1
-      - S3_PATH_STYLE_ACCESS=true
+    env_file:
+      - aws.env
     entrypoint: >
       /bin/sh -c " 
       until (/usr/bin/mc config host add minio http://minio:9000 admin password) do echo '...waiting...' && sleep 1; done; 
       /usr/bin/mc mb minio/warehouse;
-      /usr/bin/mc mb minio/tmp;
+      /usr/bin/mc mb minio/datalake;
       /usr/bin/mc policy set public minio/warehouse;
-      /usr/bin/mc policy set public minio/tmp;
+      /usr/bin/mc policy set public minio/datalake;
       tail -f /dev/null
       "
     networks:
@@ -477,10 +474,8 @@ services:
         condition: service_healthy
       hive-metastore:
         condition: service_healthy
-    environment:
-      - AWS_ACCESS_KEY_ID=admin
-      - AWS_SECRET_ACCESS_KEY=password
-      - S3_ENDPOINT=http://minio:9000
+    env_file:
+      - aws.env
     volumes:
       - ./data/notebooks:/home/jovyan/work
     ports:
@@ -505,12 +500,8 @@ services:
         condition: service_healthy
       hive-metastore:
         condition: service_healthy
-    environment:
-      - IS_AWS_ENABLED=true
-      - AWS_ACCESS_KEY_ID=admin
-      - AWS_SECRET_ACCESS_KEY=password
-      - AWS_ENDPOINT_URL=http://minio:9000
-      - AWS_REGION=us-east-1
+    env_file:
+      - aws.env
     networks:
       - datalake
 
@@ -530,13 +521,8 @@ services:
       - |
         FLINK_PROPERTIES=
         jobmanager.rpc.address: jobmanager
-      - AWS_ACCESS_KEY_ID=admin
-      - AWS_SECRET_ACCESS_KEY=password
-      - AWS_ENDPOINT_URL=http://minio:9000
-      - AWS_REGION=us-east-1
-      - AWS_DEFAULT_REGION=us-east-1
-      - S3_ENDPOINT=http://minio:9000
-      - S3_PATH_STYLE_ACCESS=true
+    env_file:
+      - aws.env
     command: jobmanager
     ports:
       - "8084:8084" # Flink UI
@@ -563,13 +549,8 @@ services:
         FLINK_PROPERTIES=
         jobmanager.rpc.address: jobmanager
         taskmanager.numberOfTaskSlots: 4
-      - AWS_ACCESS_KEY_ID=admin
-      - AWS_SECRET_ACCESS_KEY=password
-      - AWS_ENDPOINT_URL=http://minio:9000
-      - AWS_REGION=us-east-1
-      - AWS_DEFAULT_REGION=us-east-1
-      - S3_ENDPOINT=http://minio:9000
-      - S3_PATH_STYLE_ACCESS=true
+    env_file:
+      - aws.env
     command: taskmanager
     ports:
       - "6121:6121"

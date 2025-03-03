@@ -20,7 +20,7 @@ TRINO_VERSION=${TRINO_VERSION:-460}
 JUPYTER_VERSION=${JUPYTER_VERSION:-latest}
 XTABLE_VERSION=${XTABLE_VERSION:-"0.2.0"}
 FLINK_VERSION=${FLINK_VERSION:-"1.17.2"}
-MVN_REPO_URL="https://repo1.maven.org/maven2/"
+MVN_REPO_URL="https://repo1.maven.org/maven2"
 HADOOP_VERSION=${HADOOP_VERSION:-3.3.4}
 HUDI_TARGET_VERSION=$(echo "$HUDI_VERSION" | sed 's/\./_/g')
 HUDI_TARGET_DIR="hudi_${HUDI_TARGET_VERSION}"
@@ -29,36 +29,27 @@ HUDI_TARGET_DIR="hudi_${HUDI_TARGET_VERSION}"
 source validate_docker_status.sh
 
 download_hadoop_aws_jars() {
-  if [ ! -d "$HADOOP_AWS_JARS_PATH" ]; then
-    mkdir -p "$HADOOP_AWS_JARS_PATH"
-    if [ -f "$SOFTWARE_PATH/hadoop-${HADOOP_VERSION}.tar.gz" ]; then
-      tar -xf "$SOFTWARE_PATH/hadoop-${HADOOP_VERSION}.tar.gz" -C /tmp
-      cp -f "/tmp/hadoop-${HADOOP_VERSION}/share/hadoop/tools/lib/hadoop-aws-${HADOOP_VERSION}.jar" "$HADOOP_AWS_JARS_PATH/"
-      cp -f "/tmp/hadoop-${HADOOP_VERSION}"/share/hadoop/tools/lib/aws-java-sdk-bundle-*.jar "$HADOOP_AWS_JARS_PATH/"
-    else
-      echo "Downloading Hadoop AWS jar(s) ..."
-      AWS_JAVA_SDK_BUNDLE_VERSION=${AWS_JAVA_SDK_BUNDLE_VERSION:-1.12.262}
-      curl https://repo1.maven.org/maven2/com/amazonaws/aws-java-sdk-bundle/1.12.262/aws-java-sdk-bundle-1.12.262.jar \
-        -o "$HADOOP_AWS_JARS_PATH"/aws-java-sdk-bundle-1.12.262.jar
+  mkdir -p "$HADOOP_AWS_JARS_PATH"
+  if [ ! -f "$HADOOP_AWS_JARS_PATH"/aws-java-sdk-bundle-1.12.262.jar ]; then
+    wget -P "$HADOOP_AWS_JARS_PATH" https://repo1.maven.org/maven2/com/amazonaws/aws-java-sdk-bundle/1.12.262/aws-java-sdk-bundle-1.12.262.jar
+  fi
 
-      curl https://repo1.maven.org/maven2/org/apache/hadoop/hadoop-aws/3.3.4/hadoop-aws-3.3.4.jar \
-        -o "$HADOOP_AWS_JARS_PATH"/hadoop-aws-3.3.4.jar
-    fi
+  if [ ! -f "$HADOOP_AWS_JARS_PATH"/hadoop-aws-3.3.4.jar ]; then
+    wget -P "$HADOOP_AWS_JARS_PATH" https://repo1.maven.org/maven2/org/apache/hadoop/hadoop-aws/3.3.4/hadoop-aws-3.3.4.jar
   fi
 }
 
 download_db_connector_jars() {
-  if [ ! -d "$DB_CONNECTOR_JARS_PATH" ]; then
-    echo "Downloading DB connector jar(s) ..."
-    mkdir -p "$DB_CONNECTOR_JARS_PATH"
-    POSTGRES_JDBC_VERSION=${POSTGRES_JDBC_VERSION:-42.7.3}
-    MYSQL_CONNECTOR_JAVA_VERSION=${MYSQL_CONNECTOR_JAVA_VERSION:-8.0.29}
+  mkdir -p "$DB_CONNECTOR_JARS_PATH"
+  POSTGRES_JDBC_VERSION=${POSTGRES_JDBC_VERSION:-42.7.3}
+  MYSQL_CONNECTOR_JAVA_VERSION=${MYSQL_CONNECTOR_JAVA_VERSION:-8.0.29}
 
-    curl -s "https://jdbc.postgresql.org/download/postgresql-$POSTGRES_JDBC_VERSION.jar" \
-      -o "$DB_CONNECTOR_JARS_PATH/postgresql-jdbc.jar"
+  if [ ! -f "$DB_CONNECTOR_JARS_PATH/postgresql-$POSTGRES_JDBC_VERSION.jar" ]; then
+    wget -P "$DB_CONNECTOR_JARS_PATH" "https://jdbc.postgresql.org/download/postgresql-$POSTGRES_JDBC_VERSION.jar"
+  fi
 
-    curl -s "$MVN_REPO_URL/mysql/mysql-connector-java/$MYSQL_CONNECTOR_JAVA_VERSION/mysql-connector-java-$MYSQL_CONNECTOR_JAVA_VERSION.jar" \
-      -o "$DB_CONNECTOR_JARS_PATH/mysql-connector-java.jar"
+  if [ ! -f "$DB_CONNECTOR_JARS_PATH/mysql-connector-java-$MYSQL_CONNECTOR_JAVA_VERSION.jar" ]; then
+    wget -P "$DB_CONNECTOR_JARS_PATH" "$MVN_REPO_URL/mysql/mysql-connector-java/$MYSQL_CONNECTOR_JAVA_VERSION/mysql-connector-java-$MYSQL_CONNECTOR_JAVA_VERSION.jar"
   fi
 }
 
@@ -104,7 +95,7 @@ declare -a image_builds=(
   "kafka-connect $KAFKA_CONNECT_VERSION kafka_connect"
   "kafka-cat $CONFLUENT_KAFKACAT_VERSION kafka_cat"
   "trino $TRINO_VERSION trino"
-  "jupyter-notebook $JUPYTER_VERSION jupyter"
+  #"jupyter-notebook $JUPYTER_VERSION jupyter"
   "xtable $XTABLE_VERSION xtable"
   "flink $FLINK_VERSION flink"
 )
