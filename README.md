@@ -5,27 +5,29 @@
 To start the all services, use the following command:
 
 ```sh
-% docker-compose up -d
+$ sh docker_run/run_datalake.sh
 ```
 
 ## Components
 
-| Application/Component  | URL                    | Other Details                                |
-| ---------------------- | ---------------------- | -------------------------------------------- |
-| Zookeeper              | http://localhost:2181  |                                              |
-| Kafka Broker           | http://localhost:9092  |                                              |
-| Kafka Schema Registry  | http://localhost:8081  |                                              |
-| Kafka Connector        | http://localhost:8083  |                                              |
-| Debezium UI            | http://localhost:9081  |                                              |
-| Kafka Connect REST API | http://localhost:8082  |                                              |
-| Graphite UI            | http://localhost:5555  |                                              |
-| Kafka UI               | http://localhost:9082  |                                              |
-| Postgres               | http://localhost:5432  | **Username:** postgres **Password**:postgres |
-| Spark Master UI        | http://localhost:8080  |                                              |
-| Spark Worker UI        | http://localhost:18081 |                                              |
-| Trino UI               | http://localhost:9084  |                                              |
-| Minio UI               | http://localhost:9001  | **Username:** admin **Password**:password    |
-| MySQL                  | http://localhost:3306  | **Username:** admin **Password**:password    |
+| Application/Component  | URL/PORT               | Other Details                                 |
+| ---------------------- | ---------------------- | --------------------------------------------- |
+| Zookeeper              | http://localhost:2181  |                                               |
+| Kafka Broker           | http://localhost:9092  |                                               |
+| Kafka Schema Registry  | http://localhost:8081  |                                               |
+| Kafka Connector        | http://localhost:8083  |                                               |
+| Debezium UI            | http://localhost:9081  |                                               |
+| Kafka Connect REST API | http://localhost:8082  |                                               |
+| Kafka UI               | http://localhost:9082  |                                               |
+| Spark Master UI        | http://localhost:8080  |                                               |
+| Spark Worker UI        | http://localhost:18081 |                                               |
+| Spark History Server   | http://localhost:18080 |                                               |
+| Trino UI               | http://localhost:9084  |                                               |
+| Minio UI               | http://localhost:9001  | **Username:** admin **Password**:password     |
+| Postgres               | http://localhost:5432  | **Username:** postgres **Password**:postgres  |
+| MySQL                  | http://localhost:3306  | **Username:** admin **Password**:password     |
+| Cloudbeaver            | http://localhost:8978  | **Username:** cbadmin **Password**:Cbadmin123 |
+| Flink UI               | http://localhost:8084  |                                               |
 
 ## Connect to Postgres DB
 

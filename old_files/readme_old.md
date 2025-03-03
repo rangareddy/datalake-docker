@@ -1511,6 +1511,8 @@ WITH (
   'table.type' = 'COPY_ON_WRITE'
 );
 
+'hoodie.fs.atomic_creation.support' = 's3a'
+
 INSERT INTO hudi_table VALUES
     ('id1','Alex',23,TIMESTAMP '1970-01-01 00:00:01','par1'),
     ('id2','Stephen',33,TIMESTAMP '1970-01-01 00:00:02','par1'),

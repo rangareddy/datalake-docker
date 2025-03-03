@@ -1,4 +1,5 @@
 jobmanager.memory.process.size: 1600Mb
+jobmanager.memory.heap.size: 1024m
 jobmanager.heap.size: 1024m
 
 rest.port: 8084

@@ -505,7 +505,7 @@ services:
     networks:
       - datalake
 
-  jobmanager:
+  jobmanager: # master
     image: rangareddy1988/ranga-flink:${FLINK_VERSION:-latest}
     platform: ${PLATFORM:-linux/amd64}
     container_name: jobmanager
@@ -524,6 +524,8 @@ services:
     env_file:
       - aws.env
     command: jobmanager
+    volumes:
+      - ./logs/flink/jobmanager:/opt/flink/log
     ports:
       - "8084:8084" # Flink UI
       - "6123:6123" # RPC Port
@@ -537,7 +539,7 @@ services:
     networks:
       - datalake
 
-  taskmanager:
+  taskmanager: # worker
     image: rangareddy1988/ranga-flink:${FLINK_VERSION:-latest}
     platform: ${PLATFORM:-linux/amd64}
     container_name: taskmanager
@@ -549,6 +551,8 @@ services:
         FLINK_PROPERTIES=
         jobmanager.rpc.address: jobmanager
         taskmanager.numberOfTaskSlots: 4
+    volumes:
+      - ./logs/flink/taskmanager:/opt/flink/log
     env_file:
       - aws.env
     command: taskmanager
