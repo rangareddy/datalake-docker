@@ -87,7 +87,7 @@ $ curl -s localhost:8083/connectors/ | jq
 If the output is empty ([]), you can create a new connector by posting the configuration:
 
 ```sh
-curl -X POST -H "Accept:application/json" -H "Content-Type:application/json" localhost:8083/connectors/ -d @/opt/data/connectors/register_inventory_employees_pg_connector.json
+curl -s -X POST -H "Accept:application/json" -H "Content-Type:application/json" localhost:8083/connectors/ -d @/opt/data/connectors/register_employees_pg_connector.json | jq
 ```
 
 ## Verify the Connector is Created
@@ -170,19 +170,19 @@ To connect to the Kafka broker, run:
 You can list the topics to verify that the connector is working:
 
 ```sh
-$ kafka-topics --list --bootstrap-server localhost:9092 | grep fulfillment
+$ kafka-topics --list --bootstrap-server localhost:9092 | grep cdc
 ```
 
 You should see:
 
 ```sh
-fulfillment.inventory.employees
+cdc.public.employees
 ```
 
 To consume messages from the topic, use:
 
 ```sh
-$ kafka-console-consumer --bootstrap-server localhost:9092 --topic fulfillment.inventory.employees --from-beginning
+$ kafka-console-consumer --bootstrap-server localhost:9092 --topic cdc.public.employees --from-beginning
 ```
 
 ## Connect to Spark
@@ -221,9 +221,48 @@ export HUDI_UTILITIES_JAR=$(ls $HUDI_HOME/packaging/hudi-utilities-bundle/target
 
 Then, execute the following command to start the Delta Streamer:
 
+**Hudi 0.x**
+
 ```sh
 spark-submit \
     --class org.apache.hudi.utilities.deltastreamer.HoodieDeltaStreamer $HUDI_UTILITIES_JAR \
+    --props file:///tmp/my_hudi.properties \
+    --table-type MERGE_ON_READ \
+    --op UPSERT \
+    --target-base-path s3a://warehouse/employees_cdc \
+    --target-table employees_cdc  \
+    --source-class org.apache.hudi.utilities.sources.debezium.PostgresDebeziumSource \
+    --source-ordering-field _event_lsn \
+    --payload-class org.apache.hudi.common.model.debezium.PostgresDebeziumAvroPayload \
+    --continuous \
+    --min-sync-interval-seconds 60
+```
+
+**Hudi 1.x**
+
+```sh
+export HUDI_SPARK_BUNDLE_JAR=$(ls $HUDI_HOME/hudi-spark-bundle/hudi-spark*-bundle_*.jar)
+export HUDI_UTILITIES_SLIM_JAR=$(ls $HUDI_HOME/hudi-utilities-slim-bundle/hudi-utilities-slim-bundle*.jar)
+
+spark-submit \
+    --jars $HUDI_SPARK_BUNDLE_JAR \
+    --class org.apache.hudi.utilities.streamer.HoodieStreamer $HUDI_UTILITIES_SLIM_JAR \
+    --props file:///tmp/my_hudi.properties \
+    --table-type MERGE_ON_READ \
+    --op UPSERT \
+    --target-base-path s3a://warehouse/employees_cdc \
+    --target-table employees_cdc  \
+    --source-class org.apache.hudi.utilities.sources.debezium.PostgresDebeziumSource \
+    --source-ordering-field _event_lsn \
+    --payload-class org.apache.hudi.common.model.debezium.PostgresDebeziumAvroPayload \
+    --continuous \
+    --min-sync-interval-seconds 60
+
+export HUDI_UTILITIES_JAR=$(ls $HUDI_HOME/hudi-utilities-bundle/hudi-utilities-bundle*.jar)
+
+spark-submit \
+    --jars $HUDI_SPARK_BUNDLE_JAR \
+    --class org.apache.hudi.utilities.streamer.HoodieStreamer $HUDI_UTILITIES_JAR \
     --props file:///tmp/my_hudi.properties \
     --table-type MERGE_ON_READ \
     --op UPSERT \
