@@ -257,22 +257,65 @@ spark-submit \
     --payload-class org.apache.hudi.common.model.debezium.PostgresDebeziumAvroPayload \
     --continuous \
     --min-sync-interval-seconds 60
+```
 
+```sh
 export HUDI_UTILITIES_JAR=$(ls $HUDI_HOME/hudi-utilities-bundle/hudi-utilities-bundle*.jar)
 
-spark-submit \
-    --jars $HUDI_SPARK_BUNDLE_JAR \
+spark-submit --verbose \
     --class org.apache.hudi.utilities.streamer.HoodieStreamer $HUDI_UTILITIES_JAR \
     --props file:///tmp/my_hudi.properties \
     --table-type MERGE_ON_READ \
     --op UPSERT \
-    --target-base-path s3a://warehouse/employees_cdc \
+    --target-base-path file:\/\/\/tmp/employees_cdc \
     --target-table employees_cdc  \
     --source-class org.apache.hudi.utilities.sources.debezium.PostgresDebeziumSource \
     --source-ordering-field _event_lsn \
     --payload-class org.apache.hudi.common.model.debezium.PostgresDebeziumAvroPayload \
-    --continuous \
-    --min-sync-interval-seconds 60
+    --hoodie-conf hoodie.streamer.schemaprovider.registry.schemaconverter=org.apache.hudi.utilities.schema.converter.ProtoSchemaToAvroSchemaConverter
+```
+
+```sh
+spark-submit \
+    --packages org.apache.spark:spark-avro_2.12:3.5.3 \
+    --class org.apache.hudi.utilities.streamer.HoodieStreamer hudi-utilities-bundle_2.12-1.1.0-SNAPSHOT.jar \
+    --props file:///tmp/my_hudi.properties \
+    --table-type MERGE_ON_READ \
+    --op UPSERT \
+    --target-base-path file:\/\/\/tmp/employees_cdc \
+    --target-table employees_cdc  \
+    --source-class org.apache.hudi.utilities.sources.debezium.PostgresDebeziumSource \
+    --source-ordering-field _event_lsn \
+    --payload-class org.apache.hudi.common.model.debezium.PostgresDebeziumAvroPayload
+```
+
+```properties
+hoodie.datasource.write.recordkey.field=VendorID
+hoodie.datasource.write.partitionpath.field=date_col
+hoodie.datasource.write.precombine.field=date_col
+hoodie.deltastreamer.source.dfs.root=s3a//datalake
+```
+
+```sh
+export HUDI_UTILITIES_JAR=$(ls hudi-utilities-bundle*.jar)
+
+spark-submit \
+--class org.apache.hudi.utilities.deltastreamer.HoodieDeltaStreamer $HUDI_UTILITIES_JAR \
+--props my_hudi.properties \
+--source-class org.apache.hudi.utilities.sources.ParquetDFSSource \
+--source-ordering-field date_col \
+--table-type MERGE_ON_READ \
+--target-base-path file:\/\/\/tmp/hudi-deltastreamer-ny/ \
+--target-table ny_hudi_tbl 
+
+spark-submit \
+--class org.apache.hudi.utilities.streamer.HoodieStreamer $HUDI_UTILITIES_JAR \
+--props my_hudi.properties \
+--source-class org.apache.hudi.utilities.sources.ParquetDFSSource \
+--source-ordering-field date_col \
+--table-type MERGE_ON_READ \
+--target-base-path file:\/\/\/tmp/hudi-deltastreamer-ny/ \
+--target-table ny_hudi_tbl 
 ```
 
 ## Insert Sample Data into Employees Table
