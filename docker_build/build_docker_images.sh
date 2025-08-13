@@ -8,25 +8,22 @@ CURRENT_DIR="$(
 )"
 DOCKER_HUB_USERNAME="rangareddy1988"
 HIVE_VERSION=${HIVE_VERSION:-4.0.0}
-SPARK_VERSION=${SPARK_VERSION:-3.5.3}
+SPARK_VERSION=${SPARK_VERSION:-3.5.5}
+SCALA_VERSION=${SCALA_VERSION:-2.12}
 KAFKA_CONNECT_VERSION=${KAFKA_CONNECT_VERSION:-7.4.7}
 CONFLUENT_KAFKACAT_VERSION=${CONFLUENT_KAFKACAT_VERSION:-7.1.15}
-HUDI_VERSION="1.0.0"
-SCALA_VERSION=${SCALA_VERSION:-2.12}
 HADOOP_AWS_JARS_PATH="$CURRENT_DIR/hadoop-s3-jars"
 DB_CONNECTOR_JARS_PATH="$CURRENT_DIR/db_connector_jars"
 SOFTWARE_PATH="$CURRENT_DIR/software"
 TRINO_VERSION=${TRINO_VERSION:-460}
 JUPYTER_VERSION=${JUPYTER_VERSION:-latest}
-XTABLE_VERSION=${XTABLE_VERSION:-"0.2.0"}
-FLINK_VERSION=${FLINK_VERSION:-"1.17.2"}
-MVN_REPO_URL="https://repo1.maven.org/maven2"
+XTABLE_VERSION=${XTABLE_VERSION:-0.3.0}
+FLINK_VERSION=${FLINK_VERSION:-1.17.2}
 HADOOP_VERSION=${HADOOP_VERSION:-3.3.4}
-HUDI_TARGET_VERSION=$(echo "$HUDI_VERSION" | sed 's/\./_/g')
-HUDI_TARGET_DIR="hudi_${HUDI_TARGET_VERSION}"
+MVN_REPO_URL="https://repo1.maven.org/maven2"
 
 # shellcheck source=/dev/null
-source validate_docker_status.sh
+source $CURRENT_DIR/validate_docker_status.sh
 
 download_hadoop_aws_jars() {
   mkdir -p "$HADOOP_AWS_JARS_PATH"
@@ -34,8 +31,8 @@ download_hadoop_aws_jars() {
     wget -P "$HADOOP_AWS_JARS_PATH" https://repo1.maven.org/maven2/com/amazonaws/aws-java-sdk-bundle/1.12.262/aws-java-sdk-bundle-1.12.262.jar
   fi
 
-  if [ ! -f "$HADOOP_AWS_JARS_PATH"/hadoop-aws-3.3.4.jar ]; then
-    wget -P "$HADOOP_AWS_JARS_PATH" https://repo1.maven.org/maven2/org/apache/hadoop/hadoop-aws/3.3.4/hadoop-aws-3.3.4.jar
+  if [ ! -f "$HADOOP_AWS_JARS_PATH"/hadoop-aws-${HADOOP_VERSION}.jar ]; then
+    wget -P "$HADOOP_AWS_JARS_PATH" https://repo1.maven.org/maven2/org/apache/hadoop/hadoop-aws/${HADOOP_VERSION}/hadoop-aws-${HADOOP_VERSION}.jar
   fi
 }
 
@@ -66,8 +63,8 @@ download_software_tars() {
 
 ARCH=$(get_docker_architecture)
 
-sh download_and_build_hudi.sh
-sh download_flink_jars.sh
+#sh download_and_build_hudi.sh
+sh $CURRENT_DIR/download_flink_jars.sh
 
 download_software_tars
 download_hadoop_aws_jars
@@ -81,7 +78,7 @@ build_docker_image() {
 
   version_arg=$(echo "${image_name}_VERSION" | tr '[:lower:]' '[:upper:]')
   local image_version_str="${version_arg//-/_}"
-  if docker build --build-arg "$image_version_str=$image_version" --build-arg "HUDI_TARGET_DIR=$HUDI_TARGET_DIR" --platform linux/"$ARCH" -f "./Dockerfile.$dockerfile" . -t "$DOCKER_HUB_USERNAME/ranga-$image_name:$image_version" -t "$DOCKER_HUB_USERNAME/ranga-$image_name:latest"; then
+  if docker build --build-arg "$image_version_str=$image_version" --platform linux/"$ARCH" -f "$CURRENT_DIR/Dockerfile.$dockerfile" . -t "$DOCKER_HUB_USERNAME/ranga-$image_name:$image_version" -t "$DOCKER_HUB_USERNAME/ranga-$image_name:latest"; then
     echo "Successfully built $image_name:$image_version"
   else
     echo "Failed to build $image_name:$image_version"
@@ -99,8 +96,6 @@ declare -a image_builds=(
   "xtable $XTABLE_VERSION xtable"
   "flink $FLINK_VERSION flink"
 )
-
-#declare -a image_builds=("flink $FLINK_VERSION flink")
 
 # Iterate through the array and build images
 for build_config in "${image_builds[@]}"; do

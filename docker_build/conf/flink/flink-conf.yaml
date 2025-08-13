@@ -3,11 +3,11 @@ jobmanager.memory.heap.size: 1024m
 jobmanager.heap.size: 1024m
 
 rest.port: 8084
-rest.bind-port: 8084
+#rest.bind-port: 8084
 jobmanager.rpc.port: 6123
-taskmanager.rpc.port: 6122
-taskmanager.data.port: 6121
-blob.server.port: 6124
+#taskmanager.rpc.port: 6122
+#taskmanager.data.port: 6121
+#blob.server.port: 6124
 
 taskmanager.heap.size: 1024m
 taskmanager.memory.process.size: 1728m
@@ -18,9 +18,17 @@ parallelism.default: 4
 execution.checkpointing.interval: 60s
 execution.checkpointing.tolerable-failed-checkpoints: 10
 execution.checkpointing.mode: EXACTLY_ONCE
-state.backend.type: hashmap
-state.checkpoints.dir: file:///tmp/flink/checkpoints
+
+#==============================================================================
+# Fault tolerance and checkpointing
+#==============================================================================
+
+# The backend that will be used to store operator state checkpoints if checkpointing is enabled.
+# Supported backends are 'jobmanager', 'filesystem', 'rocksdb', or the <class-name-of-factory>.
+
+state.backend.type: filesystem
 state.checkpoints.num-retained: 10
+state.checkpoints.dir: file:///tmp/flink/checkpoints
 state.savepoints.dir: file:///tmp/flink/savepoints
 
 heartbeat.interval: 5000
@@ -28,20 +36,19 @@ heartbeat.timeout: 8000
 web.backpressure.refresh-interval: 10000
 rest.flamegraph.enabled: true
 
-# S3/Minio access key and secret
-s3.access-key: admin
-s3.secret-key: password
-s3.endpoint: http://minio:9000
-s3.path.style.access: true
-s3.ssl.enabled: false
-s3.fs.impl: org.apache.hadoop.fs.s3a.S3AFileSystem
-s3.aws.credentials.provider: org.apache.hadoop.fs.s3a.SimpleAWSCredentialsProvider
-
-fs.s3a.access.key: admin
-fs.s3a.secret.key: password
-fs.s3a.endpoint: http://minio:9000
-fs.s3a.path.style.access: true
-
 restart-strategy.type: fixed-delay
 restart-strategy.fixed-delay.attempts: 3
 restart-strategy.fixed-delay.delay: 10 s
+
+#==============================================================================
+# S3 Endpoint Configuration
+#==============================================================================
+s3.access-key: admin
+s3.secret-key: password
+s3.endpoint: http://minio:9000
+s3.path-style-access: true
+
+#s3.path.style.access: true
+#s3.connection.ssl.enabled: false
+#s3.fs.impl: org.apache.hadoop.fs.s3a.S3AFileSystem
+#s3.aws.credentials.provider: org.apache.hadoop.fs.s3a.SimpleAWSCredentialsProvider

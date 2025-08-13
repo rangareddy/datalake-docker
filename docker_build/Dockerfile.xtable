@@ -11,6 +11,8 @@ RUN apt-get -qq update -y --fix-missing \
 
 # Download and install XTable
 ARG XTABLE_HOME=${XTABLE_HOME:-/opt/xtable}
+ARG XTABLE_VERSION=${XTABLE_VERSION:-0.3.0}
+
 ENV XTABLE_HOME=$XTABLE_HOME
 
 RUN echo "Downloading the xtable..." && \
@@ -27,6 +29,7 @@ RUN mv xtable-utilities/target/xtable-utilities_2.12-$(mvn help:evaluate -Dexpre
 FROM eclipse-temurin:11.0.25_9-jdk AS final
 
 ARG XTABLE_HOME=${XTABLE_HOME:-/opt/xtable}
+ARG XTABLE_VERSION=${XTABLE_VERSION:-0.3.0}
 ENV XTABLE_HOME=$XTABLE_HOME
 
 RUN apt-get -qq update -y --fix-missing \

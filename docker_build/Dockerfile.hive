@@ -23,7 +23,8 @@ RUN ln -sf $HADOOP_HOME/share/hadoop/common/lib/guava-27.0-jre.jar $HIVE_HOME/li
 COPY conf/hive/* $HIVE_HOME/conf/
 COPY db_connector_jars/* $HIVE_HOME/lib/
 
-ARG HUDI_TARGET_DIR=$HUDI_TARGET_DIR
-COPY $HUDI_TARGET_DIR/hudi-hadoop-mr-bundle/* $HIVE_HOME/lib/
+ARG HUDI_VERSION=${HUDI_VERSION:-1.0.2}
+RUN curl -s https://repo1.maven.org/maven2/org/apache/hudi/hudi-hadoop-mr-bundle/${HUDI_VERSION}/hudi-hadoop-mr-bundle-${HUDI_VERSION}.jar \
+	-o $HIVE_HOME/lib/hudi-hadoop-mr-bundle-${HUDI_VERSION}.jar
 
 USER hive
