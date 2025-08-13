@@ -206,7 +206,7 @@ services:
       - datalake
 
   hive-metastore:
-    image: rangareddy1988/ranga-hive:${HIVE_VERSION:-4.0.0}
+    image: rangareddy1988/ranga-hive:${HIVE_VERSION:-latest}
     platform: ${PLATFORM:-linux/amd64}
     container_name: hive-metastore
     restart: unless-stopped
@@ -234,7 +234,7 @@ services:
       - datalake
 
   hive-server:
-    image: rangareddy1988/ranga-hive:${HIVE_VERSION:-4.0.0}
+    image: rangareddy1988/ranga-hive:${HIVE_VERSION:-latest}
     platform: ${PLATFORM:-linux/amd64}
     container_name: hive-server
     restart: unless-stopped
@@ -257,7 +257,7 @@ services:
       - datalake
 
   spark-master:
-    image: rangareddy1988/ranga-spark:${SPARK_VERSION:-3.5.3}
+    image: rangareddy1988/ranga-spark:${SPARK_VERSION:-latest}
     platform: ${PLATFORM:-linux/amd64}
     container_name: spark-master
     restart: unless-stopped
@@ -288,7 +288,7 @@ services:
       - datalake
 
   spark-worker:
-    image: rangareddy1988/ranga-spark:${SPARK_VERSION:-3.5.3}
+    image: rangareddy1988/ranga-spark:${SPARK_VERSION:-latest}
     platform: ${PLATFORM:-linux/amd64}
     container_name: spark-worker
     restart: unless-stopped
@@ -420,7 +420,7 @@ services:
       - datalake
 
   trino:
-    image: rangareddy1988/ranga-trino:${TRINO_VERSION:-460}
+    image: rangareddy1988/ranga-trino:${TRINO_VERSION:-latest}
     platform: ${PLATFORM:-linux/amd64}
     container_name: trino
     restart: unless-stopped
@@ -521,6 +521,7 @@ services:
       - |
         FLINK_PROPERTIES=
         jobmanager.rpc.address: jobmanager
+        rest.address: jobmanager
     env_file:
       - aws.env
     command: jobmanager
@@ -544,8 +545,10 @@ services:
     platform: ${PLATFORM:-linux/amd64}
     container_name: taskmanager
     restart: unless-stopped
+    scale: 1
     depends_on:
       - jobmanager
+      - minio
     environment:
       - |
         FLINK_PROPERTIES=

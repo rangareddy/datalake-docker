@@ -2,8 +2,9 @@
 
 SCRIPT_DIR="$(cd $(dirname "$0"); pwd)"
 
-state=${2:-"start"}
-state="${state,,}"
+state=${1:-"start"}
+#state="${state,,}"
+state=$(echo "$state" | tr '[:upper:]' '[:lower:]')
 
 set -euo pipefail # Enable strict error handling
 
@@ -14,8 +15,8 @@ start_datalake() {
 }
 
 stop_datalake() {
-    echo "Starting Datalake services..."
-    docker-compose -f "$SCRIPT_DIR/docker-compose.yml" up -d
+    echo "Stopping Datalake services..."
+    docker-compose -f "$SCRIPT_DIR/docker-compose.yml" down
     echo "Datalake services are stopped."
 }
 
