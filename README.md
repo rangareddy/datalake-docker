@@ -63,8 +63,7 @@ docker exec -it kafka-connect bash
 You can verify that Kafka Connect is running by executing:
 
 ```sh
-curl -s -H \
- "Accept:application/json" localhost:8083/ | jq
+curl -s -H "Accept:application/json" localhost:8083/ | jq
 ```
 
 You should see output similar to:
@@ -88,10 +87,11 @@ curl -s localhost:8083/connectors/ | jq
 If the output is empty ([]), you can create a new connector by posting the configuration:
 
 ```sh
-curl -s -X \
- POST -H \
- "Accept:application/json" -H \
- "Content-Type:application/json" localhost:8083/connectors/ -d @/opt/data/connectors/register_employees_pg_connector.json | jq
+curl -s -X POST \
+ -H "Accept:application/json" \
+ -H "Content-Type:application/json" \
+ http://localhost:8083/connectors/ \
+ -d @/opt/data/connector_configs/streamer_connector/register_employees_pg_connector.json | jq
 ```
 
 ## Verify the Connector is Created
@@ -99,8 +99,8 @@ curl -s -X \
 To verify that the connector has been created successfully, run:
 
 ```sh
-curl -s -X \
- GET http://localhost:8083/connectors/employees_pg_connector | jq
+curl -s -X GET \
+ http://localhost:8083/connectors/employees_pg_connector | jq
 ```
 
 You should see output similar to:
@@ -143,8 +143,8 @@ You should see output similar to:
 To check that the connector is running, execute:
 
 ```sh
-curl -s -X \
- GET http://localhost:8083/connectors/employees_pg_connector/status | jq
+curl -s -X GET \
+ http://localhost:8083/connectors/employees_pg_connector/status | jq
 ```
 
 ```json
