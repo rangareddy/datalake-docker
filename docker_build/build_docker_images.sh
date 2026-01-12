@@ -57,7 +57,7 @@ download_software_tars() {
   fi
 
   if [ ! -f "$SOFTWARE_PATH/spark-${SPARK_VERSION}-bin-hadoop3.tgz" ]; then
-    wget -P "$SOFTWARE_PATH" https://dlcdn.apache.org/spark/spark-${SPARK_VERSION}/spark-${SPARK_VERSION}-bin-hadoop3.tgz
+    wget -P "$SOFTWARE_PATH" https://archive.apache.org/dist/spark/spark-${SPARK_VERSION}/spark-${SPARK_VERSION}-bin-hadoop3.tgz
   fi
 }
 

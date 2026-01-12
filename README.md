@@ -5,7 +5,7 @@
 To start the all services, use the following command:
 
 ```sh
-$ sh docker_run/run_datalake.sh
+sh docker_run/run_datalake.sh
 ```
 
 ## Components
@@ -34,11 +34,11 @@ $ sh docker_run/run_datalake.sh
 To connect to the Postgres database running in a Docker container, execute:
 
 ```sh
-% docker exec -it postgres bash
+docker exec -it postgres bash
 ```
 
 ```sql
-# psql -h postgres -U postgres -W
+psql -h postgres -U postgres -W
 postgres=#
 ```
 
@@ -57,13 +57,14 @@ postgres=# select * from employees;
 To connect to the Kafka Connect service, run:
 
 ```sh
-$ docker exec -it kafka-connect bash
+docker exec -it kafka-connect bash
 ```
 
 You can verify that Kafka Connect is running by executing:
 
 ```sh
-$ curl -s -H "Accept:application/json" localhost:8083/ | jq
+curl -s -H \
+ "Accept:application/json" localhost:8083/ | jq
 ```
 
 You should see output similar to:
@@ -81,13 +82,16 @@ You should see output similar to:
 To check for existing connectors, run:
 
 ```sh
-$ curl -s localhost:8083/connectors/ | jq
+curl -s localhost:8083/connectors/ | jq
 ```
 
 If the output is empty ([]), you can create a new connector by posting the configuration:
 
 ```sh
-curl -s -X POST -H "Accept:application/json" -H "Content-Type:application/json" localhost:8083/connectors/ -d @/opt/data/connectors/register_employees_pg_connector.json | jq
+curl -s -X \
+ POST -H \
+ "Accept:application/json" -H \
+ "Content-Type:application/json" localhost:8083/connectors/ -d @/opt/data/connectors/register_employees_pg_connector.json | jq
 ```
 
 ## Verify the Connector is Created
@@ -95,7 +99,8 @@ curl -s -X POST -H "Accept:application/json" -H "Content-Type:application/json" 
 To verify that the connector has been created successfully, run:
 
 ```sh
-curl -s -X GET http://localhost:8083/connectors/employees_pg_connector | jq
+curl -s -X \
+ GET http://localhost:8083/connectors/employees_pg_connector | jq
 ```
 
 You should see output similar to:
@@ -138,7 +143,8 @@ You should see output similar to:
 To check that the connector is running, execute:
 
 ```sh
-$ curl -s -X GET http://localhost:8083/connectors/employees_pg_connector/status | jq
+curl -s -X \
+ GET http://localhost:8083/connectors/employees_pg_connector/status | jq
 ```
 
 ```json
@@ -164,13 +170,13 @@ $ curl -s -X GET http://localhost:8083/connectors/employees_pg_connector/status 
 To connect to the Kafka broker, run:
 
 ```sh
-% docker exec -it kafka bash
+docker exec -it kafka bash
 ```
 
 You can list the topics to verify that the connector is working:
 
 ```sh
-$ kafka-topics --list --bootstrap-server localhost:9092 | grep cdc
+kafka-topics --list --bootstrap-server localhost:9092 | grep cdc
 ```
 
 You should see:
@@ -182,7 +188,7 @@ cdc.public.employees
 To consume messages from the topic, use:
 
 ```sh
-$ kafka-console-consumer --bootstrap-server localhost:9092 --topic cdc.public.employees --from-beginning
+kafka-console-consumer --bootstrap-server localhost:9092 --topic cdc.public.employees --from-beginning
 ```
 
 ## Connect to Spark
@@ -190,7 +196,7 @@ $ kafka-console-consumer --bootstrap-server localhost:9092 --topic cdc.public.em
 To connect to the Spark master, execute:
 
 ```sh
-% docker exec -it spark-master bash
+docker exec -it spark-master bash
 ```
 
 Create or edit the properties file for Hudi:
