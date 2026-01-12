@@ -34,7 +34,8 @@ RUN mkdir -p $CONNECTORS_PATH && mkdir -p $DATA_PATH && mkdir -p $HUDI_KAFKA_CON
 	confluent-hub install --no-prompt confluentinc/kafka-connect-s3:latest && \
 	confluent-hub install --no-prompt confluentinc/kafka-connect-s3-source:latest && \
 	confluent-hub install --no-prompt confluentinc/kafka-connect-jdbc:latest && \
-	cp -r /usr/share/confluent-hub-components/confluentinc-kafka-connect-hdfs3/lib $HUDI_KAFKA_CONNECTOR_PATH/lib
+	cp -r /usr/share/confluent-hub-components/confluentinc-kafka-connect-hdfs3/lib $HUDI_KAFKA_CONNECTOR_PATH/lib && \
+	confluent-hub install --no-prompt debezium/debezium-connector-postgresql:${DEBEZIUM_VERSION}
 
 #RUN confluent-hub install --no-prompt debezium/debezium-connector-mysql:${DEBEZIUM_VERSION} && \
 #	confluent-hub install --no-prompt debezium/debezium-connector-postgresql:${DEBEZIUM_VERSION}

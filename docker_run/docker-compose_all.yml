@@ -342,6 +342,36 @@ services:
     networks:
       - datalake
 
+  mysql:
+    image: ubuntu/mysql:${MYSQL_VERSION:-8.0-20.04_edge}
+    platform: ${PLATFORM:-linux/amd64}
+    container_name: mysql
+    restart: unless-stopped
+    environment:
+      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD:-password}
+      - MYSQL_DATABASE=${MYSQL_DATABASE:-default}
+      - MYSQL_USER=${MYSQL_USER:-admin}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD:-password}
+    ports:
+      - "3306:3306"
+    volumes:
+      - ./data/mysql:/var/lib/mysql
+      - ./db_scripts/mysql:/docker-entrypoint-initdb.d
+    command:
+      [
+        "--character-set-server=utf8mb4",
+        "--collation-server=utf8mb4_unicode_ci",
+        "--default-authentication-plugin=caching_sha2_password",
+      ]
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "--silent"]
+      start_period: 20s
+      interval: 30s
+      timeout: 30s
+      retries: 5
+    networks:
+      - datalake
+
   minio:
     image: minio/minio
     platform: ${PLATFORM:-linux/amd64}
@@ -389,6 +419,27 @@ services:
     networks:
       - datalake
 
+  trino:
+    image: rangareddy1988/ranga-trino:${TRINO_VERSION:-latest}
+    platform: ${PLATFORM:-linux/amd64}
+    container_name: trino
+    restart: unless-stopped
+    depends_on:
+      minio:
+        condition: service_healthy
+      hive-metastore:
+        condition: service_healthy
+    ports:
+      - "9084:8080"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/v1/info"]
+      start_period: 90s
+      interval: 30s
+      timeout: 30s
+      retries: 5
+    networks:
+      - datalake
+
   cloudbeaver:
     image: dbeaver/cloudbeaver:${CLOUDBEAVER_VERSION:-latest}
     container_name: cloudbeaver
@@ -410,6 +461,107 @@ services:
       interval: 30s
       timeout: 30s
       retries: 5
+    networks:
+      - datalake
+
+  jupyter-notebook:
+    image: rangareddy1988/ranga-jupyter-notebook:${JUPYTER_NOTEBOOK_VERSION:-latest}
+    platform: ${PLATFORM:-linux/amd64}
+    container_name: jupyter-notebook
+    restart: unless-stopped
+    depends_on:
+      minio:
+        condition: service_healthy
+      hive-metastore:
+        condition: service_healthy
+    env_file:
+      - aws.env
+    volumes:
+      - ./data/notebooks:/home/jovyan/work
+    ports:
+      - "8888:8888"
+    healthcheck:
+      test: nc -z localhost 8888 || exit 1
+      start_period: 20s
+      start_interval: 10s
+      interval: 30s
+      timeout: 30s
+      retries: 5
+    networks:
+      - datalake
+
+  xtable:
+    image: rangareddy1988/ranga-xtable:${XTABLE_VERSION:-latest}
+    platform: ${PLATFORM:-linux/amd64}
+    container_name: xtable
+    restart: unless-stopped
+    depends_on:
+      minio:
+        condition: service_healthy
+      hive-metastore:
+        condition: service_healthy
+    env_file:
+      - aws.env
+    networks:
+      - datalake
+
+  jobmanager: # master
+    image: rangareddy1988/ranga-flink:${FLINK_VERSION:-latest}
+    platform: ${PLATFORM:-linux/amd64}
+    container_name: jobmanager
+    restart: unless-stopped
+    depends_on:
+      kafka:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      hive-metastore:
+        condition: service_healthy
+    environment:
+      - |
+        FLINK_PROPERTIES=
+        jobmanager.rpc.address: jobmanager
+        rest.address: jobmanager
+    env_file:
+      - aws.env
+    command: jobmanager
+    volumes:
+      - ./logs/flink/jobmanager:/opt/flink/log
+    ports:
+      - "8084:8084" # Flink UI
+      - "6123:6123" # RPC Port
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8084/overview | jq -r '.[\"flink-version\"]'"]
+      start_period: 30s
+      start_interval: 10s
+      interval: 30s
+      timeout: 30s
+      retries: 10
+    networks:
+      - datalake
+
+  taskmanager: # worker
+    image: rangareddy1988/ranga-flink:${FLINK_VERSION:-latest}
+    platform: ${PLATFORM:-linux/amd64}
+    container_name: taskmanager
+    restart: unless-stopped
+    scale: 1
+    depends_on:
+      - jobmanager
+      - minio
+    environment:
+      - |
+        FLINK_PROPERTIES=
+        jobmanager.rpc.address: jobmanager
+        taskmanager.numberOfTaskSlots: 4
+    volumes:
+      - ./logs/flink/taskmanager:/opt/flink/log
+    env_file:
+      - aws.env
+    command: taskmanager
+    ports:
+      - "6121:6121"
+      - "6122:6122"
     networks:
       - datalake
 

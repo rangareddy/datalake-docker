@@ -76,6 +76,18 @@ You should see output similar to:
 }
 ```
 
+## Verify the PostgresConnector is Available
+
+```sh
+curl -sS http://localhost:8083/connector-plugins | jq '.[].class' | grep postgres
+```
+
+If successful, the output should include
+
+```sh
+"io.debezium.connector.postgresql.PostgresConnector"
+```
+
 ## Create Connector Using Kafka Connect
 
 To check for existing connectors, run:
@@ -92,6 +104,38 @@ curl -s -X POST \
  -H "Content-Type:application/json" \
  http://localhost:8083/connectors/ \
  -d @/opt/data/connector_configs/streamer_connector/register_employees_pg_connector.json | jq
+```
+
+Output would be
+
+```json
+{
+  "name": "employees_pg_connector",
+  "config": {
+    "connector.class": "io.debezium.connector.postgresql.PostgresConnector",
+    "plugin.name": "pgoutput",
+    "slot.name": "debezium",
+    "database.hostname": "postgres",
+    "database.port": "5432",
+    "database.user": "postgres",
+    "database.password": "postgres",
+    "database.dbname": "postgres",
+    "topic.prefix": "cdc",
+    "database.server.name": "postgres",
+    "schema.include.list": "public",
+    "table.include.list": "public.employees",
+    "publication.name": "dbz_publication",
+    "publication.autocreate.mode": "filtered",
+    "tombstones.on.delete": "false",
+    "key.converter": "io.confluent.connect.avro.AvroConverter",
+    "key.converter.schema.registry.url": "http://kafka-schema-registry:8081/",
+    "value.converter": "io.confluent.connect.avro.AvroConverter",
+    "value.converter.schema.registry.url": "http://kafka-schema-registry:8081/",
+    "name": "employees_pg_connector"
+  },
+  "tasks": [],
+  "type": "source"
+}
 ```
 
 ## Verify the Connector is Created
@@ -191,6 +235,8 @@ To consume messages from the topic, use:
 kafka-console-consumer --bootstrap-server localhost:9092 --topic cdc.public.employees --from-beginning
 ```
 
+Press Ctrl+C to stop the console consumer.
+
 ## Connect to Spark
 
 To connect to the Spark master, execute:
@@ -217,12 +263,12 @@ hoodie.datasource.write.schema.allow.auto.evolution.column.drop=true
 hoodie.datasource.write.keygenerator.class=org.apache.hudi.keygen.NonpartitionedKeyGenerator
 ```
 
-Run the Hudi Delta Streamer
+### Run the Hudi Delta Streamer
 
 Next, you will need to run the Hudi Delta Streamer using the properties file you just created. First, set the path to the Hudi utilities JAR:
 
 ```sh
-export HUDI_UTILITIES_JAR=$(ls $HUDI_HOME/packaging/hudi-utilities-bundle/target/hudi-utilities-bundle*.jar)
+export HUDI_UTILITIES_JAR=$(ls $HUDI_HOME/hudi-utilities-bundle*.jar)
 ```
 
 Then, execute the following command to start the Delta Streamer:
@@ -247,8 +293,8 @@ spark-submit \
 **Hudi 1.x**
 
 ```sh
-export HUDI_SPARK_BUNDLE_JAR=$(ls $HUDI_HOME/hudi-spark-bundle/hudi-spark*-bundle_*.jar)
-export HUDI_UTILITIES_SLIM_JAR=$(ls $HUDI_HOME/hudi-utilities-slim-bundle/hudi-utilities-slim-bundle*.jar)
+export HUDI_SPARK_BUNDLE_JAR=$(ls $HUDI_HOME/hudi-spark*-bundle_*.jar)
+export HUDI_UTILITIES_SLIM_JAR=$(ls $HUDI_HOME/hudi-utilities-slim-bundle*.jar)
 
 spark-submit \
     --jars $HUDI_SPARK_BUNDLE_JAR \
@@ -266,7 +312,7 @@ spark-submit \
 ```
 
 ```sh
-export HUDI_UTILITIES_JAR=$(ls $HUDI_HOME/hudi-utilities-bundle/hudi-utilities-bundle*.jar)
+export HUDI_UTILITIES_JAR=$(ls $HUDI_HOME/hudi-utilities-bundle*.jar)
 
 spark-submit --verbose \
     --class org.apache.hudi.utilities.streamer.HoodieStreamer $HUDI_UTILITIES_JAR \
@@ -328,9 +374,14 @@ spark-submit \
 
 You can insert sample data into the employees table in Postgres to test the setup:
 
+```sh
+psql -h postgres -U postgres -W
+postgres=#
+```
+
 ```sql
-insert into employees values(2, 'Nishanth', 7, 300000, 'Software');
-insert into employees values(3, 'Reddy', 60, 350000, 'Hardware');
+insert into employees values(4, 'Nishanth', 7, 300000, 'Software');
+insert into employees values(5, 'Reddy', 60, 350000, 'Hardware');
 ```
 
 ## Connect to Spark Shell
@@ -338,7 +389,7 @@ insert into employees values(3, 'Reddy', 60, 350000, 'Hardware');
 To connect to the Spark shell with the necessary Hudi dependencies, run:
 
 ```sh
-export HUDI_SPARK_BUNDLE_JAR=$(ls $HUDI_HOME/packaging/hudi-spark-bundle/target/hudi-spark*-bundle_*.jar)
+export HUDI_SPARK_BUNDLE_JAR=$(ls $HUDI_HOME/hudi-spark*-bundle_*.jar)
 
 spark-shell \
 --jars $HUDI_SPARK_BUNDLE_JAR \
@@ -377,8 +428,8 @@ docker exec -it spark-master bash
 ```
 
 ```sh
-export HUDI_SPARK_BUNDLE_JAR=$(ls $HUDI_HOME/packaging/hudi-spark-bundle/target/hudi-spark*-bundle_*.jar)
-export HUDI_UTILITIES_SLIM_JAR=$(ls $HUDI_HOME/packaging/hudi-utilities-slim-bundle/target/hudi-utilities-slim-bundle*.jar)
+export HUDI_SPARK_BUNDLE_JAR=$(ls $HUDI_HOME/hudi-spark*-bundle_*.jar)
+export HUDI_UTILITIES_SLIM_JAR=$(ls $HUDI_HOME/hudi-utilities-slim-bundle*.jar)
 ```
 
 ```sh
@@ -418,8 +469,8 @@ trino:cdc_test_db> select * from orders;
 ```
 
 ```sh
-export HUDI_SPARK_BUNDLE_JAR=$(ls $HUDI_HOME/packaging/hudi-spark-bundle/target/hudi-spark*-bundle_*.jar)
-export HUDI_UTILITIES_SLIM_JAR=$(ls $HUDI_HOME/packaging/hudi-utilities-slim-bundle/target/hudi-utilities-slim-bundle*.jar)
+export HUDI_SPARK_BUNDLE_JAR=$(ls $HUDI_HOME/hudi-spark*-bundle_*.jar)
+export HUDI_UTILITIES_SLIM_JAR=$(ls $HUDI_HOME/hudi-utilities-slim-bundle*.jar)
 
 spark-submit \
   --jars $HUDI_SPARK_BUNDLE_JAR \

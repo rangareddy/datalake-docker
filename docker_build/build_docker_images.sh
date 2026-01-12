@@ -91,10 +91,10 @@ declare -a image_builds=(
   "spark $SPARK_VERSION spark"
   "kafka-connect $KAFKA_CONNECT_VERSION kafka_connect"
   "kafka-cat $CONFLUENT_KAFKACAT_VERSION kafka_cat"
-  "trino $TRINO_VERSION trino"
+  #"trino $TRINO_VERSION trino"
   #"jupyter-notebook $JUPYTER_VERSION jupyter"
-  "xtable $XTABLE_VERSION xtable"
-  "flink $FLINK_VERSION flink"
+  #"xtable $XTABLE_VERSION xtable"
+  #"flink $FLINK_VERSION flink"
 )
 
 # Iterate through the array and build images
