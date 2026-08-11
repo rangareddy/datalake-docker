@@ -21,8 +21,11 @@ APACHE_URL=$MVN_URL/org/apache
 POSTGRES_JDBC_VERSION=${POSTGRES_JDBC_VERSION:-42.7.3}
 MYSQL_CONNECTOR_JAVA_VERSION=${MYSQL_CONNECTOR_JAVA_VERSION:-8.0.29}
 ICEBERG_VERSION=${ICEBERG_VERSION:-1.5.2}
-HUDI_VERSION=${HUDI_VERSION:-1.0.0}
+# Keep in sync with HUDI_VERSION in Dockerfile.flink: that Dockerfile also wgets the
+# Hudi Flink bundle into lib/, so a mismatch leaves two bundle versions on the classpath.
+HUDI_VERSION=${HUDI_VERSION:-1.0.2}
 DELTA_VERSION=${DELTA_VERSION:-3.2.0}
+SHAPELESS_VERSION=${SHAPELESS_VERSION:-2.3.4}
 #HIVE_VERSION=${HIVE_VERSION:-3.1.3}
 HIVE_VERSION=3.1.3
 
@@ -35,11 +38,25 @@ fi
 HUDI_TARGET_VERSION=$(echo "$HUDI_VERSION" | sed 's/\./_/g')
 HUDI_TARGET_DIR="${HUDI_DIR}_${HUDI_TARGET_VERSION}"
 
+mkdir -p "$FLINK_LIB"
+
+# lib/ is gitignored and persists between runs, so bundles from earlier builds
+# accumulate. Flink puts every jar in lib/ on the classpath, and two Hudi bundles
+# there is a silent, order-dependent breakage. Drop any that is not the target version.
+for stale in "$FLINK_LIB"/hudi-flink*-bundle*.jar; do
+    [ -e "$stale" ] || continue
+    case "$(basename "$stale")" in
+    "hudi-flink${FLINK_MAJOR_VERSION}-bundle-${HUDI_VERSION}.jar") ;;
+    *)
+        echo "Removing stale Hudi bundle: $(basename "$stale")"
+        rm -f "$stale"
+        ;;
+    esac
+done
+
 if [ -d "$HUDI_TARGET_DIR" ]; then
     cp -r "$HUDI_TARGET_DIR"/packaging/hudi-flink-bundle/target/*.jar "$FLINK_LIB"
 fi
-
-mkdir -p "$FLINK_LIB"
 
 # Hadoop jars
 HADOOP_JARS=(
@@ -78,10 +95,14 @@ JDBC_JARS=(
 )
 
 # Flink Hive Connector jars
+# NOTE: do NOT add a raw hive-exec jar here. flink-sql-connector-hive is already an
+# uber jar containing a relocated hive-exec, and the raw one bundles Parquet 1.10,
+# which sorts ahead of the Hudi bundle on Flink's lib classpath and shadows Parquet
+# 1.13. That surfaces as:
+#   NoSuchMethodError: org.apache.parquet.schema.Types$PrimitiveBuilder.as(LogicalTypeAnnotation)
 HIVE_JARS=(
     "$APACHE_URL/flink/flink-connector-hive_${SCALA_VERSION}/${FLINK_VERSION}/flink-connector-hive_${SCALA_VERSION}-${FLINK_VERSION}.jar"
     "$APACHE_URL/flink/flink-sql-connector-hive-${HIVE_VERSION}_${SCALA_VERSION}/$FLINK_VERSION/flink-sql-connector-hive-${HIVE_VERSION}_${SCALA_VERSION}-${FLINK_VERSION}.jar"
-    "$APACHE_URL/hive/hive-exec/${HIVE_VERSION}/hive-exec-${HIVE_VERSION}.jar"
     "$MVN_URL/org/apache/thrift/libfb303/0.9.3/libfb303-0.9.3.jar"
     "$MVN_URL/org/antlr/antlr-runtime/3.5.2/antlr-runtime-3.5.2.jar"
 )
@@ -103,11 +124,17 @@ ICEBERG_JARS=(
 )
 
 # Flink Delta Connector jars
+# NOTE: do NOT add flink-sql-parquet here. It ships its own copy of
+# org.apache.parquet.avro.AvroSchemaConverter compiled against Flink's shaded Avro,
+# and it sorts ahead of the Hudi bundle on Flink's lib classpath, so Hudi's call with
+# its own shaded Avro Schema fails with:
+#   NoSuchMethodError: AvroSchemaConverter.convert(org.apache.hudi.org.apache.avro.Schema)
+# Delta does not need it; delta-standalone does need shapeless at runtime.
 DELTA_JARS=(
     "$MVN_URL/io/delta/delta-storage/$DELTA_VERSION/delta-storage-$DELTA_VERSION.jar"
     "$MVN_URL/io/delta/delta-standalone_$SCALA_VERSION/$DELTA_VERSION/delta-standalone_$SCALA_VERSION-$DELTA_VERSION.jar"
     "$MVN_URL/io/delta/delta-flink/$DELTA_VERSION/delta-flink-$DELTA_VERSION.jar"
-    "$APACHE_URL/flink/flink-sql-parquet/$FLINK_VERSION/flink-sql-parquet-$FLINK_VERSION.jar"
+    "$MVN_URL/com/chuusai/shapeless_$SCALA_VERSION/$SHAPELESS_VERSION/shapeless_$SCALA_VERSION-$SHAPELESS_VERSION.jar"
 )
 
 ALL_JARS=("${KAFKA_JARS[@]}" "${JDBC_JARS[@]}" "${HIVE_JARS[@]}" "${HUDI_JARS[@]}" "${ICEBERG_JARS[@]}" "${DELTA_JARS[@]}")

@@ -26,7 +26,12 @@ PARTITIONED BY (`partition`)
 WITH (
   'connector' = 'hudi',
   'path' = 's3a://warehouse/hudi_db/hudi_table',
-  'table.type' = 'COPY_ON_WRITE'
+  'table.type' = 'COPY_ON_WRITE',
+  -- Hudi's default FileSystemBasedLockProvider rejects s3a ("this fs can not support
+  -- atomic creation") and the failure kills the JobMaster, so a lock provider must be
+  -- set explicitly on object storage. InProcessLockProvider suits this single-writer
+  -- playground; use a Hive/ZooKeeper provider for real multi-writer setups.
+  'hoodie.write.lock.provider' = 'org.apache.hudi.client.transaction.lock.InProcessLockProvider'
 );
 
 INSERT INTO hudi_table VALUES

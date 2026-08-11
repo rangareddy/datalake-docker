@@ -52,10 +52,21 @@ RUN set -x \
 
 COPY conf/flink/* $FLINK_CONF/
 COPY conf/hadoop/core-site.xml $FLINK_CONF/
+# Also place core-site.xml on HADOOP_CONF_DIR. Connectors that take an explicit
+# hive-conf-dir (Hudi, Iceberg) find the MinIO credentials in $FLINK_CONF, but the
+# Delta connector resolves its Hadoop config from HADOOP_CONF_DIR only and otherwise
+# falls back to the default AWS provider chain, failing with S3 403 Forbidden.
+COPY conf/hadoop/core-site.xml $HADOOP_HOME/etc/hadoop/core-site.xml
 COPY lib/* $FLINK_LIB
 ARG HUDI_FLINK_JAR=hudi-flink${FLINK_MAJOR_VERSION}-bundle-${HUDI_VERSION}.jar
 
-RUN wget -P $FLINK_LIB https://repo1.maven.org/maven2/org/apache/hudi/hudi-flink${FLINK_MAJOR_VERSION}-bundle/${HUDI_VERSION}/$HUDI_FLINK_JAR && \
+# Only fetch the Hudi bundle if download_flink_jars.sh did not already stage it, and
+# drop any other bundle version first: two hudi-flink bundles on Flink's lib classpath
+# shadow each other's relocated Parquet/Avro classes and break the Hudi connector.
+RUN find $FLINK_LIB -name 'hudi-flink*-bundle*.jar' ! -name "$HUDI_FLINK_JAR" -delete && \
+    if [ ! -f "$FLINK_LIB/$HUDI_FLINK_JAR" ]; then \
+    wget -P $FLINK_LIB https://repo1.maven.org/maven2/org/apache/hudi/hudi-flink${FLINK_MAJOR_VERSION}-bundle/${HUDI_VERSION}/$HUDI_FLINK_JAR; \
+    fi && \
     ln -fs ${HADOOP_HOME}/share/hadoop/tools/lib/hadoop-aws-${HADOOP_VERSION}.jar $FLINK_LIB/hadoop-aws.jar && \
     ln -fs ${HADOOP_HOME}/share/hadoop/tools/lib/aws-java-sdk-bundle-*.jar $FLINK_LIB/aws-java-sdk-bundle.jar && \
     ln -fs ${HADOOP_HOME}/share/hadoop/hdfs/hadoop-hdfs-client-${HADOOP_VERSION}.jar $FLINK_LIB/hadoop-hdfs-client.jar

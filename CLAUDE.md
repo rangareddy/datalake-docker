@@ -118,6 +118,42 @@ service inside. `docker_build/check_service_status_utility.sh` (baked in at
 MinIO object store — `run_datalake.sh stop` does a `down` without `-v`, so bind-mounted state
 survives restarts and must be deleted manually for a clean slate.
 
+### The Flink image's lib/ is classpath-fragile
+
+Flink puts **every** jar in `/opt/flink/lib` on the classpath in sorted order, so a jar that
+duplicates a class from the Hudi bundle and sorts before `hudi-*` silently wins. Two such jars were
+being shipped, and each broke the Hudi connector with a different `NoSuchMethodError`:
+
+- `flink-sql-parquet` — its `org.apache.parquet.avro.AvroSchemaConverter` is compiled against
+  Flink's shaded Avro; Hudi calls the same class with its own shaded Avro `Schema`.
+- a raw `hive-exec` jar — bundles Parquet 1.10 (no `LogicalTypeAnnotation`), shadowing the Hudi
+  bundle's Parquet 1.13. `flink-sql-connector-hive` is already an uber jar with a relocated
+  `hive-exec`, so the raw one is pure duplication.
+
+Neither is needed by Delta or Iceberg. Before adding any jar to `download_flink_jars.sh`, check
+whether it duplicates a class the Hudi bundle already relocates.
+
+`docker_build/lib/` is gitignored and persists between runs, so bundles accumulate — three
+`hudi-flink1.17-bundle-*` jars had piled up. `download_flink_jars.sh` now prunes non-target
+versions, and `Dockerfile.flink` no longer wgets a second copy on top of the staged one; keep
+`HUDI_VERSION` aligned between those two files.
+
+Two more Flink facts that cost real debugging time:
+
+- **Hudi on s3a needs an explicit lock provider.** The default `FileSystemBasedLockProvider` throws
+  `Unsupported scheme :s3a, since this fs can not support atomic creation`, and that failure kills
+  the JobMaster and the cluster entrypoint — not just the job.
+- **Delta reads its Hadoop config from `HADOOP_CONF_DIR` only.** Hudi and Iceberg find the MinIO
+  credentials because their catalogs set `hive-conf-dir=/opt/flink/conf`; Delta doesn't, so without
+  `core-site.xml` on `$HADOOP_HOME/etc/hadoop` it falls back to the default AWS chain and fails with
+  S3 403. `delta-standalone` also needs `shapeless` at runtime, which nothing pulls in transitively.
+
+The sample scripts land flat in `/opt/flink/conf/` (Docker `COPY` of `conf/flink/*` flattens the
+`sql/` dir), and run with
+`docker exec jobmanager /opt/flink/bin/sql-client.sh -f /opt/flink/conf/hudi-flink.sql`. A leading
+`SET` must be the file's first statement — Flink 1.17 fails to recognise it if comment lines precede
+it.
+
 ### Local-path gotcha in the Hudi/Flink scripts
 
 `download_and_build_hudi.sh` and `download_flink_jars.sh` both branch on whether `whoami` contains

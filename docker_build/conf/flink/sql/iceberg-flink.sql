@@ -15,7 +15,7 @@ CREATE DATABASE IF NOT EXISTS iceberg_db;
 
 USE iceberg_db;
 
-CREATE TABLE iceberg_table (
+CREATE TABLE IF NOT EXISTS iceberg_table (
     id BIGINT,
     name STRING
 );
