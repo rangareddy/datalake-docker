@@ -78,7 +78,7 @@ build_docker_image() {
 
   version_arg=$(echo "${image_name}_VERSION" | tr '[:lower:]' '[:upper:]')
   local image_version_str="${version_arg//-/_}"
-  if docker build --build-arg "$image_version_str=$image_version" --platform linux/"$ARCH" -f "$CURRENT_DIR/Dockerfile.$dockerfile" . -t "$DOCKER_HUB_USERNAME/ranga-$image_name:$image_version" -t "$DOCKER_HUB_USERNAME/ranga-$image_name:latest"; then
+  if docker build --build-arg "$image_version_str=$image_version" --platform linux/"$ARCH" -f "$CURRENT_DIR/Dockerfile.$dockerfile" "$CURRENT_DIR" -t "$DOCKER_HUB_USERNAME/ranga-$image_name:$image_version" -t "$DOCKER_HUB_USERNAME/ranga-$image_name:latest"; then
     echo "Successfully built $image_name:$image_version"
   else
     echo "Failed to build $image_name:$image_version"

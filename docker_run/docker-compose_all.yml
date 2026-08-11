@@ -409,11 +409,11 @@ services:
       - aws.env
     entrypoint: >
       /bin/sh -c " 
-      until (/usr/bin/mc config host add minio http://minio:9000 admin password) do echo '...waiting...' && sleep 1; done; 
-      /usr/bin/mc mb minio/warehouse;
-      /usr/bin/mc mb minio/datalake;
-      /usr/bin/mc policy set public minio/warehouse;
-      /usr/bin/mc policy set public minio/datalake;
+      until (/usr/bin/mc alias set minio http://minio:9000 admin password) do echo '...waiting...' && sleep 1; done;
+      /usr/bin/mc mb --ignore-existing minio/warehouse;
+      /usr/bin/mc mb --ignore-existing minio/datalake;
+      /usr/bin/mc anonymous set public minio/warehouse;
+      /usr/bin/mc anonymous set public minio/datalake;
       tail -f /dev/null
       "
     networks:
@@ -531,7 +531,7 @@ services:
       - "8084:8084" # Flink UI
       - "6123:6123" # RPC Port
     healthcheck:
-      test: ["CMD", "curl", "-sf", "http://localhost:8084/overview | jq -r '.[\"flink-version\"]'"]
+      test: ["CMD", "curl", "-sf", "http://localhost:8084/overview"]
       start_period: 30s
       start_interval: 10s
       interval: 30s

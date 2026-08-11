@@ -11,11 +11,10 @@ everything is Dockerfiles, shell scripts, and service config.
 
 ## Commands
 
-Build images (must be run from `docker_build/` — the build context is the *current working
-directory*, not the script's directory, so `COPY software/...` fails from the repo root):
+Build images (runnable from anywhere; the build context is pinned to `docker_build/`):
 
 ```sh
-cd docker_build && ./build_docker_images.sh
+./docker_build/build_docker_images.sh
 ```
 
 The script first downloads prerequisites into gitignored dirs (`software/`, `hadoop-s3-jars/`,
@@ -27,10 +26,15 @@ from env vars with defaults at the top of the script (`SPARK_VERSION`, `HIVE_VER
 Run the stack (from anywhere; the script resolves its own dir):
 
 ```sh
-sh docker_run/run_datalake.sh          # start (default)
-sh docker_run/run_datalake.sh stop
-sh docker_run/run_datalake.sh restart
+sh docker_run/run_datalake.sh                      # start (default)
+sh docker_run/run_datalake.sh stop|restart|status
+sh docker_run/run_datalake.sh logs spark-master    # follow one or more services
+sh docker_run/run_datalake.sh validate             # compose config -q, no containers touched
+PROFILE=all sh docker_run/run_datalake.sh start    # superset stack
 ```
+
+`validate` is the cheap check to run after editing either compose file — a dangling
+`depends_on` makes the whole project invalid and `start` fails before anything launches.
 
 Publish (pushes *every* local image whose repository contains `ranga-`, both tags):
 
@@ -70,12 +74,15 @@ transcripts for each.
 
 ### Two compose files
 
-`docker_run/docker-compose.yml` is what `run_datalake.sh` starts: Kafka stack, Hive, Spark,
-Postgres, MinIO, Cloudbeaver. `docker_run/docker-compose_all.yml` is the superset — it adds MySQL,
-Trino, Jupyter, XTable, and Flink (jobmanager/taskmanager) — and is **not** referenced by any
-script. Use it explicitly with `docker-compose -f docker_run/docker-compose_all.yml up -d`. The two
-files duplicate the shared service definitions, so a change to a common service must be applied to
-both.
+`docker_run/docker-compose.yml` is the default (`PROFILE=core`): Kafka stack, Hive, Spark, Postgres,
+MinIO, Cloudbeaver. `docker_run/docker-compose_all.yml` is the superset (`PROFILE=all`) — it adds
+MySQL, Trino, Jupyter, XTable, and Flink (jobmanager/taskmanager).
+
+The two files duplicate the shared service definitions verbatim, so **any change to a common service
+must be applied to both**. This duplication has already caused one outage: `cloudbeaver` in
+`docker-compose.yml` carried a `depends_on: mysql` that only exists in the `_all` file, which made
+the entire core project invalid. Run `sh docker_run/run_datalake.sh validate` (and the same with
+`PROFILE=all`) after touching either file.
 
 ### Config is baked into images, not mounted
 
@@ -88,9 +95,12 @@ The only live-editable config is what the compose files bind-mount: `docker_run/
 ### Image tags must line up with compose
 
 `build_docker_images.sh` tags each image `rangareddy1988/ranga-<name>:<version>` *and* `:latest`.
-Compose resolves e.g. `rangareddy1988/ranga-spark:${SPARK_VERSION:-latest}`. If `SPARK_VERSION` is
-exported in the shell running compose, it must match a version actually built or Docker will try to
-pull a nonexistent tag from Docker Hub. Leaving it unset uses `:latest`.
+Compose resolves e.g. `rangareddy1988/ranga-spark:${SPARK_VERSION:-latest}`, and `docker_run/.env`
+pins those versions to match the build script's defaults. A pin that was never built makes Docker
+try to pull a nonexistent tag from Docker Hub, so `.env` and `build_docker_images.sh` must move
+together. The `all`-profile images (`trino`, `xtable`, `jupyter-notebook`, `flink`) are commented
+out of the build script's `image_builds` array, so they must be enabled and built before
+`PROFILE=all` will start.
 
 ### Container lifecycle
 

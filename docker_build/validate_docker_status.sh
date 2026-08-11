@@ -7,9 +7,18 @@ check_docker_installed() {
         echo "ERROR: Docker is not installed. Please install docker and rerun."
         exit 1
     fi
-    if ! command -v docker-compose >/dev/null 2>&1; then
-        echo "ERROR: Docker Compose is not installed."
+    if ! docker compose version >/dev/null 2>&1 && ! command -v docker-compose >/dev/null 2>&1; then
+        echo "ERROR: Docker Compose is not installed (neither 'docker compose' nor 'docker-compose')."
         exit 1
+    fi
+}
+
+# Echo the available Compose command: v2 plugin preferred, v1 binary as fallback.
+get_docker_compose_cmd() {
+    if docker compose version >/dev/null 2>&1; then
+        echo "docker compose"
+    else
+        echo "docker-compose"
     fi
 }
 

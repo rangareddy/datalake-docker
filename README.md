@@ -2,32 +2,74 @@
 
 ## Start all the services
 
-To start the all services, use the following command:
+To start the services, use the following command:
 
 ```sh
 sh docker_run/run_datalake.sh
 ```
 
+The script accepts `start` (default), `stop`, `restart`, `status`, `logs [service...]`
+and `validate`:
+
+```sh
+sh docker_run/run_datalake.sh status
+sh docker_run/run_datalake.sh logs spark-master
+sh docker_run/run_datalake.sh stop
+```
+
+Two profiles are available. The default `core` profile starts
+`docker_run/docker-compose.yml`. Setting `PROFILE=all` starts
+`docker_run/docker-compose_all.yml`, which additionally brings up MySQL, Trino,
+Jupyter, XTable and Flink:
+
+```sh
+PROFILE=all sh docker_run/run_datalake.sh start
+```
+
+## Build the images
+
+The `rangareddy1988/ranga-*` images are built locally. The build script also
+downloads the Spark/Hadoop tarballs and the S3 and JDBC jars that the Dockerfiles
+`COPY` in, so it must be run before the first start if the images are not already
+present:
+
+```sh
+./docker_build/build_docker_images.sh
+```
+
+By default it builds `hive`, `spark`, `kafka-connect` and `kafka-cat`. The `trino`,
+`jupyter-notebook`, `xtable` and `flink` entries are commented out in the
+`image_builds` array; uncomment them to build the images the `all` profile needs.
+Versions are overridable env vars (`SPARK_VERSION`, `HIVE_VERSION`, `TRINO_VERSION`, ...)
+defined at the top of the script.
+
 ## Components
 
-| Application/Component  | URL/PORT               | Other Details                                 |
-| ---------------------- | ---------------------- | --------------------------------------------- |
-| Zookeeper              | http://localhost:2181  |                                               |
-| Kafka Broker           | http://localhost:9092  |                                               |
-| Kafka Schema Registry  | http://localhost:8081  |                                               |
-| Kafka Connector        | http://localhost:8083  |                                               |
-| Debezium UI            | http://localhost:9081  |                                               |
-| Kafka Connect REST API | http://localhost:8082  |                                               |
-| Kafka UI               | http://localhost:9082  |                                               |
-| Spark Master UI        | http://localhost:8080  |                                               |
-| Spark Worker UI        | http://localhost:18081 |                                               |
-| Spark History Server   | http://localhost:18080 |                                               |
-| Trino UI               | http://localhost:9084  |                                               |
-| Minio UI               | http://localhost:9001  | **Username:** admin **Password**:password     |
-| Postgres               | http://localhost:5432  | **Username:** postgres **Password**:postgres  |
-| MySQL                  | http://localhost:3306  | **Username:** admin **Password**:password     |
-| Cloudbeaver            | http://localhost:8978  | **Username:** cbadmin **Password**:Cbadmin123 |
-| Flink UI               | http://localhost:8084  |                                               |
+Services marked **all** only exist in the `all` profile.
+
+| Application/Component  | URL/PORT               | Profile | Other Details                                 |
+| ---------------------- | ---------------------- | ------- | --------------------------------------------- |
+| Zookeeper              | localhost:2181         | core    |                                               |
+| Kafka Broker           | localhost:9092         | core    | In-network listener: `kafka:29092`            |
+| Kafka JMX              | localhost:9101         | core    |                                               |
+| Kafka Schema Registry  | http://localhost:8081  | core    |                                               |
+| Kafka REST Proxy       | http://localhost:8082  | core    |                                               |
+| Kafka Connect REST API | http://localhost:8083  | core    |                                               |
+| Kafka UI               | http://localhost:9082  | core    |                                               |
+| Hive Metastore (thrift)| localhost:9083         | core    |                                               |
+| HiveServer2            | localhost:10000        | core    | Web UI on http://localhost:10002              |
+| Spark Master UI        | http://localhost:8080  | core    | Submit to `spark://spark-master:7077`         |
+| Spark Worker UI        | http://localhost:18081 | core    |                                               |
+| Spark History Server   | http://localhost:18080 | core    |                                               |
+| Spark Application UI   | http://localhost:14040 | core    | Container 4040-4042 mapped to 14040-14042     |
+| Minio API              | http://localhost:9000  | core    | Buckets: `warehouse`, `datalake`              |
+| Minio UI               | http://localhost:9001  | core    | **Username:** admin **Password**:password     |
+| Postgres               | localhost:5432         | core    | **Username:** postgres **Password**:postgres  |
+| Cloudbeaver            | http://localhost:8978  | core    | **Username:** cbadmin **Password**:Cbadmin123 |
+| MySQL                  | localhost:3306         | all     | **Username:** admin **Password**:password     |
+| Trino UI               | http://localhost:9084  | all     |                                               |
+| Jupyter Lab            | http://localhost:8888  | all     | Token disabled                                |
+| Flink UI               | http://localhost:8084  | all     |                                               |
 
 ## Connect to Postgres DB
 

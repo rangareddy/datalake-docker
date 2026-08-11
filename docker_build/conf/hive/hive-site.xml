@@ -135,7 +135,7 @@
     </property>
     <property>
         <name>hive.metastore.pre.event.listeners</name>
-        <name>org.apache.hadoop.hive.ql.security.authorization.AuthorizationPreEventListener</name>
+        <value>org.apache.hadoop.hive.ql.security.authorization.AuthorizationPreEventListener</value>
     </property>
     <property>
         <name>hive.security.metastore.authorization.manager</name>
