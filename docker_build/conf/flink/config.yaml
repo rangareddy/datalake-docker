@@ -1,0 +1,79 @@
+# Flink 1.19 replaced the flat flink-conf.yaml with this nested config.yaml, and 1.20
+# no longer reads flink-conf.yaml at all. Keep settings here, in nested form: a flat
+# "rest.port: 8084" line in this file is silently ignored, which would leave the REST
+# endpoint on its default 8081 and break the 8084 port mapping and healthcheck.
+# bind-host values must stay 0.0.0.0 so the endpoints are reachable from other containers.
+
+# This file REPLACES the one in the base image, so the JDK 17 module flags the image
+# ships must be carried over verbatim. Without them, connectors that reflect into JDK
+# internals fail, e.g. Hudi dies with
+#   InaccessibleObjectException: Unable to make field java.net.URI.string accessible:
+#   module java.base does not "opens java.net" to unnamed module
+env:
+  java:
+    opts:
+      all: --add-exports=java.base/sun.net.util=ALL-UNNAMED --add-exports=java.rmi/sun.rmi.registry=ALL-UNNAMED --add-exports=jdk.compiler/com.sun.tools.javac.api=ALL-UNNAMED --add-exports=jdk.compiler/com.sun.tools.javac.file=ALL-UNNAMED --add-exports=jdk.compiler/com.sun.tools.javac.parser=ALL-UNNAMED --add-exports=jdk.compiler/com.sun.tools.javac.tree=ALL-UNNAMED --add-exports=jdk.compiler/com.sun.tools.javac.util=ALL-UNNAMED --add-exports=java.security.jgss/sun.security.krb5=ALL-UNNAMED --add-opens=java.base/java.lang=ALL-UNNAMED --add-opens=java.base/java.net=ALL-UNNAMED --add-opens=java.base/java.io=ALL-UNNAMED --add-opens=java.base/java.nio=ALL-UNNAMED --add-opens=java.base/sun.nio.ch=ALL-UNNAMED --add-opens=java.base/java.lang.reflect=ALL-UNNAMED --add-opens=java.base/java.text=ALL-UNNAMED --add-opens=java.base/java.time=ALL-UNNAMED --add-opens=java.base/java.util=ALL-UNNAMED --add-opens=java.base/java.util.concurrent=ALL-UNNAMED --add-opens=java.base/java.util.concurrent.atomic=ALL-UNNAMED --add-opens=java.base/java.util.concurrent.locks=ALL-UNNAMED
+
+jobmanager:
+  bind-host: 0.0.0.0
+  rpc:
+    address: jobmanager
+    port: 6123
+  memory:
+    process:
+      size: 1600m
+  execution:
+    failover-strategy: region
+
+taskmanager:
+  bind-host: 0.0.0.0
+  host: 0.0.0.0
+  numberOfTaskSlots: 4
+  memory:
+    process:
+      size: 1728m
+
+parallelism:
+  default: 4
+
+rest:
+  address: 0.0.0.0
+  bind-address: 0.0.0.0
+  port: 8084
+  flamegraph:
+    enabled: true
+
+execution:
+  checkpointing:
+    interval: 60s
+    tolerable-failed-checkpoints: 10
+
+state:
+  backend:
+    type: filesystem
+  checkpoints:
+    num-retained: 10
+    dir: file:///tmp/flink/checkpoints
+  savepoints:
+    dir: file:///tmp/flink/savepoints
+
+heartbeat:
+  interval: 5000
+  timeout: 8000
+
+web:
+  backpressure:
+    refresh-interval: 10000
+
+restart-strategy:
+  type: fixed-delay
+  fixed-delay:
+    attempts: 3
+    delay: 10 s
+
+# S3 endpoint for the flink-s3-fs-hadoop plugin (MinIO).
+s3:
+  access-key: admin
+  secret-key: password
+  endpoint: http://minio:9000
+  path-style-access: true

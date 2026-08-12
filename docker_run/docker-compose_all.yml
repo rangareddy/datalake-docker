@@ -457,7 +457,9 @@ services:
     volumes:
       - ./data/cloudbeaver:/opt/cloudbeaver/workspace
     healthcheck:
-      test: nc -z localhost 8978 || exit 1
+      # The cloudbeaver image has curl but not nc, so an nc probe here reports
+      # unhealthy forever even while the UI serves normally.
+      test: curl -sf http://localhost:8978 >/dev/null || exit 1
       interval: 30s
       timeout: 30s
       retries: 5

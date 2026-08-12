@@ -47,6 +47,14 @@ RUN curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2
 WORKDIR $XTABLE_HOME
 
 COPY conf/xtable/my_config.yaml $XTABLE_HOME
+# my_config.yaml addresses MinIO as s3://, so XTable needs the same S3A settings the
+# other engines get from core-site.xml. The AWS CLI profile set up in the entrypoint
+# only covers the CLI, not the Hadoop FileSystem the bundled jar uses. Pass this file
+# explicitly when running a sync:
+#   java -jar xtable-utilities.jar --datasetConfig my_config.yaml --hadoopConfig core-site.xml
+COPY conf/hadoop/core-site.xml $XTABLE_HOME/core-site.xml
+ENV HADOOP_CONF_DIR=$XTABLE_HOME
+
 COPY scripts/xtable/entrypoint.sh /opt/entrypoint.sh
 RUN chmod 755 /opt/entrypoint.sh
 

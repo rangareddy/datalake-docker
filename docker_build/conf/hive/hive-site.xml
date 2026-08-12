@@ -145,9 +145,25 @@
         <name>fs.defaultFS</name>
         <value>s3a://warehouse/</value>
     </property>
+    <!--
+    Both s3a:// and s3:// are served by S3AFileSystem so either form of a table
+    location works. S3AFileSystem reads the fs.s3a.* settings below for both schemes.
+    -->
     <property>
         <name>fs.s3a.impl</name>
         <value>org.apache.hadoop.fs.s3a.S3AFileSystem</value>
+    </property>
+    <property>
+        <name>fs.s3.impl</name>
+        <value>org.apache.hadoop.fs.s3a.S3AFileSystem</value>
+    </property>
+    <property>
+        <name>fs.AbstractFileSystem.s3a.impl</name>
+        <value>org.apache.hadoop.fs.s3a.S3A</value>
+    </property>
+    <property>
+        <name>fs.AbstractFileSystem.s3.impl</name>
+        <value>org.apache.hadoop.fs.s3a.S3A</value>
     </property>
     <property>
         <name>fs.s3a.endpoint</name>

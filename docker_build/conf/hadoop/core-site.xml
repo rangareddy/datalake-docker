@@ -4,10 +4,31 @@
 		<name>fs.defaultFS</name>
 		<value>s3a://warehouse/</value>
 	</property>
+
+	<!--
+	Both the s3a:// and s3:// schemes are served by S3AFileSystem so that either form
+	of a path works against MinIO. S3AFileSystem always reads its settings from the
+	fs.s3a.* keys below, whichever scheme the URI used, so those keys are not repeated
+	for s3. The fs.AbstractFileSystem.* entries cover engines that resolve through
+	FileContext rather than FileSystem.
+	-->
 	<property>
 		<name>fs.s3a.impl</name>
 		<value>org.apache.hadoop.fs.s3a.S3AFileSystem</value>
 	</property>
+	<property>
+		<name>fs.s3.impl</name>
+		<value>org.apache.hadoop.fs.s3a.S3AFileSystem</value>
+	</property>
+	<property>
+		<name>fs.AbstractFileSystem.s3a.impl</name>
+		<value>org.apache.hadoop.fs.s3a.S3A</value>
+	</property>
+	<property>
+		<name>fs.AbstractFileSystem.s3.impl</name>
+		<value>org.apache.hadoop.fs.s3a.S3A</value>
+	</property>
+
 	<property>
 		<name>fs.s3a.endpoint</name>
 		<value>http://minio:9000</value>
@@ -32,32 +53,4 @@
 		<name>fs.s3a.connection.ssl.enabled</name>
 		<value>false</value>
 	</property>
-	<!--<property>
-		<name>fs.s3.impl</name>
-		<value>org.apache.hadoop.fs.s3a.S3AFileSystem</value>
-	</property>
-	<property>
-		<name>fs.s3.endpoint</name>
-		<value>http://minio:9000</value>
-	</property>
-	<property>
-		<name>fs.s3.path.style.access</name>
-		<value>true</value>
-	</property>
-	<property>
-		<name>fs.s3.access.key</name>
-		<value>admin</value>
-	</property>
-	<property>
-		<name>fs.s3.secret.key</name>
-		<value>password</value>
-	</property>
-	<property>
-		<name>fs.s3.aws.credentials.provider</name>
-		<value>org.apache.hadoop.fs.s3a.SimpleAWSCredentialsProvider</value>
-	</property>
-	<property>
-		<name>fs.s3.connection.ssl.enabled</name>
-		<value>false</value>
-	</property>-->
 </configuration>

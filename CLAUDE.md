@@ -19,9 +19,10 @@ Build images (runnable from anywhere; the build context is pinned to `docker_bui
 
 The script first downloads prerequisites into gitignored dirs (`software/`, `hadoop-s3-jars/`,
 `db_connector_jars/`, `lib/`) via `download_flink_jars.sh`, then builds each image in the
-`image_builds` array. Only `hive`, `spark`, `kafka-connect`, `kafka-cat` are enabled; `trino`,
-`jupyter-notebook`, `xtable`, `flink` are commented out — uncomment to build them. Versions come
-from env vars with defaults at the top of the script (`SPARK_VERSION`, `HIVE_VERSION`, …).
+`image_builds` array: `hive`, `spark`, `kafka-connect`, `kafka-cat`, `trino`, `jupyter-notebook`,
+`xtable`, `flink`. Versions come from env vars with defaults at the top of the script
+(`SPARK_VERSION`, `HIVE_VERSION`, …). The `xtable` image is by far the slowest, since it git-clones
+and `mvn install`s XTable from source in a builder stage.
 
 Run the stack (from anywhere; the script resolves its own dir):
 
@@ -55,6 +56,17 @@ cd docker_build && docker build --build-arg SPARK_VERSION=3.5.5 --platform linux
 sidecar creates the `warehouse` and `datalake` buckets on startup and then idles. `core-site.xml`
 (baked into the Spark and Flink images) sets `fs.defaultFS=s3a://warehouse/` with static
 credentials, so bare paths in Spark resolve to MinIO.
+
+Both `s3a://` and `s3://` work everywhere, and the two are interchangeable against the same object:
+a table written through one scheme reads back through the other. `s3://` is mapped onto
+`S3AFileSystem` via `fs.s3.impl` (plus `fs.AbstractFileSystem.s3.impl` for FileContext callers) in
+both `conf/hadoop/core-site.xml` and `conf/hive/hive-site.xml`. Credentials are **not** duplicated
+per scheme: `S3AFileSystem` always reads the `fs.s3a.*` keys whichever scheme the URI used, so a
+`fs.s3.access.key` would be dead config. Trino needs nothing here, since its native S3 filesystem
+handles both schemes on its own. Only the Hadoop-based engines require the mapping.
+
+Anything that talks to MinIO through Hadoop needs `core-site.xml` on its classpath. Only the Spark
+and Flink images ship it; Hive carries the same settings inside `hive-site.xml`.
 
 **Catalog plane.** A single Hive Metastore (`thrift://hive-metastore:9083`, Postgres-backed) is the
 shared catalog for Spark (`spark.sql.catalogImplementation=hive`), Trino (every catalog in
@@ -98,9 +110,7 @@ The only live-editable config is what the compose files bind-mount: `docker_run/
 Compose resolves e.g. `rangareddy1988/ranga-spark:${SPARK_VERSION:-latest}`, and `docker_run/.env`
 pins those versions to match the build script's defaults. A pin that was never built makes Docker
 try to pull a nonexistent tag from Docker Hub, so `.env` and `build_docker_images.sh` must move
-together. The `all`-profile images (`trino`, `xtable`, `jupyter-notebook`, `flink`) are commented
-out of the build script's `image_builds` array, so they must be enabled and built before
-`PROFILE=all` will start.
+together.
 
 ### Container lifecycle
 
@@ -133,10 +143,23 @@ being shipped, and each broke the Hudi connector with a different `NoSuchMethodE
 Neither is needed by Delta or Iceberg. Before adding any jar to `download_flink_jars.sh`, check
 whether it duplicates a class the Hudi bundle already relocates.
 
-`docker_build/lib/` is gitignored and persists between runs, so bundles accumulate — three
-`hudi-flink1.17-bundle-*` jars had piled up. `download_flink_jars.sh` now prunes non-target
-versions, and `Dockerfile.flink` no longer wgets a second copy on top of the staged one; keep
-`HUDI_VERSION` aligned between those two files.
+The worst instance of this is **Hudi 1.2.0 vs Iceberg**, which is why Hudi is pinned to 1.1.1
+rather than the newest release. Hudi 1.2.0 relocated its codahale metrics to
+`org.apache.hudi.com.codahale.metrics.*` but kept shipping `org.apache.flink.dropwizard.metrics.*`
+under the original package name, so its wrapper's constructor signature no longer matches the one
+Iceberg's copy expects. Whichever jar loses the sort order fails its INSERT with
+`NoSuchMethodError` on `DropwizardHistogramWrapper` / `DropwizardMeterWrapper`. This cannot be
+worked around by passing one bundle via `sql-client -j`, because `org.apache.flink.` is a
+**parent-first** package, so the `lib/` copy always wins. Hudi 1.1.1 does not relocate codahale and
+coexists with Iceberg. If you bump Hudi past 1.1.1, verify the Flink Iceberg sample still writes
+data, and check the job state in the REST API rather than trusting `sql-client`'s exit output: the
+client submits asynchronously and reports success for a job that later fails.
+
+`docker_build/lib/` is gitignored and persists between runs, so jars accumulate — three
+`hudi-flink1.17-bundle-*` jars had piled up, and a Flink version bump leaves the whole previous
+connector set behind. `download_flink_jars.sh` now prunes anything outside the expected set for the
+current run, and `Dockerfile.flink` no longer wgets a second Hudi bundle on top of the staged one;
+keep `HUDI_VERSION` aligned between those two files.
 
 Two more Flink facts that cost real debugging time:
 
@@ -151,8 +174,14 @@ Two more Flink facts that cost real debugging time:
 The sample scripts land flat in `/opt/flink/conf/` (Docker `COPY` of `conf/flink/*` flattens the
 `sql/` dir), and run with
 `docker exec jobmanager /opt/flink/bin/sql-client.sh -f /opt/flink/conf/hudi-flink.sql`. A leading
-`SET` must be the file's first statement — Flink 1.17 fails to recognise it if comment lines precede
-it.
+`SET` must be the file's first statement — Flink fails to recognise it if comment lines precede it.
+From Hudi 1.2.0 on, the Hudi DDL also requires an explicit `PRIMARY KEY (...) NOT ENFORCED`.
+
+Flink config lives in `conf/flink/config.yaml` in **nested** YAML. Flink 1.19 replaced the flat
+`flink-conf.yaml` and 1.20 no longer reads it at all, so a flat `rest.port: 8084` line is silently
+ignored, leaving REST on the default 8081 and breaking both the port mapping and the healthcheck.
+The compose `FLINK_PROPERTIES` env still works: the image entrypoint feeds it through
+`config-parser-utils.sh` as `-Dkey=value`, which merges correctly into the nested file.
 
 ### Local-path gotcha in the Hudi/Flink scripts
 

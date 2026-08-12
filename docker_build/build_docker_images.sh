@@ -15,24 +15,28 @@ CONFLUENT_KAFKACAT_VERSION=${CONFLUENT_KAFKACAT_VERSION:-7.1.15}
 HADOOP_AWS_JARS_PATH="$CURRENT_DIR/hadoop-s3-jars"
 DB_CONNECTOR_JARS_PATH="$CURRENT_DIR/db_connector_jars"
 SOFTWARE_PATH="$CURRENT_DIR/software"
-TRINO_VERSION=${TRINO_VERSION:-460}
+TRINO_VERSION=${TRINO_VERSION:-483}
 JUPYTER_VERSION=${JUPYTER_VERSION:-latest}
 XTABLE_VERSION=${XTABLE_VERSION:-0.3.0}
-FLINK_VERSION=${FLINK_VERSION:-1.17.2}
+FLINK_VERSION=${FLINK_VERSION:-1.20.5}
+AWS_JAVA_SDK_VERSION=${AWS_JAVA_SDK_VERSION:-1.12.262}
 HADOOP_VERSION=${HADOOP_VERSION:-3.3.4}
 MVN_REPO_URL="https://repo1.maven.org/maven2"
+
 
 # shellcheck source=/dev/null
 source $CURRENT_DIR/validate_docker_status.sh
 
 download_hadoop_aws_jars() {
+  AWS_JAVA_SDK_JAR="aws-java-sdk-bundle-${AWS_JAVA_SDK_VERSION}.jar"
+
   mkdir -p "$HADOOP_AWS_JARS_PATH"
-  if [ ! -f "$HADOOP_AWS_JARS_PATH"/aws-java-sdk-bundle-1.12.262.jar ]; then
-    wget -P "$HADOOP_AWS_JARS_PATH" https://repo1.maven.org/maven2/com/amazonaws/aws-java-sdk-bundle/1.12.262/aws-java-sdk-bundle-1.12.262.jar
+  if [ ! -f "$HADOOP_AWS_JARS_PATH/$AWS_JAVA_SDK_JAR" ]; then
+    wget -P "$HADOOP_AWS_JARS_PATH" $MVN_REPO_URL/com/amazonaws/aws-java-sdk-bundle/${AWS_JAVA_SDK_VERSION}/${AWS_JAVA_SDK_JAR}
   fi
 
   if [ ! -f "$HADOOP_AWS_JARS_PATH"/hadoop-aws-${HADOOP_VERSION}.jar ]; then
-    wget -P "$HADOOP_AWS_JARS_PATH" https://repo1.maven.org/maven2/org/apache/hadoop/hadoop-aws/${HADOOP_VERSION}/hadoop-aws-${HADOOP_VERSION}.jar
+    wget -P "$HADOOP_AWS_JARS_PATH" $MVN_REPO_URL/org/apache/hadoop/hadoop-aws/${HADOOP_VERSION}/hadoop-aws-${HADOOP_VERSION}.jar
   fi
 }
 
@@ -91,10 +95,10 @@ declare -a image_builds=(
   "spark $SPARK_VERSION spark"
   "kafka-connect $KAFKA_CONNECT_VERSION kafka_connect"
   "kafka-cat $CONFLUENT_KAFKACAT_VERSION kafka_cat"
-  #"trino $TRINO_VERSION trino"
-  #"jupyter-notebook $JUPYTER_VERSION jupyter"
-  #"xtable $XTABLE_VERSION xtable"
-  #"flink $FLINK_VERSION flink"
+  "trino $TRINO_VERSION trino"
+  "jupyter-notebook $JUPYTER_VERSION jupyter"
+  "xtable $XTABLE_VERSION xtable"
+  "flink $FLINK_VERSION flink"
 )
 
 # Iterate through the array and build images

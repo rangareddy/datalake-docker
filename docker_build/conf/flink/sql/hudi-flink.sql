@@ -20,7 +20,11 @@ CREATE TABLE IF NOT EXISTS hudi_table(
     name VARCHAR(10),
     age INT,
     ts TIMESTAMP(3),
-    `partition` VARCHAR(20)
+    `partition` VARCHAR(20),
+    -- Required from Hudi 1.2.0 on. Earlier releases inferred the record key, but 1.2.0
+    -- rejects the DDL with HoodieValidationException: "Primary key definition is
+    -- required". The alternative is the hoodie.datasource.write.recordkey.field option.
+    PRIMARY KEY (uuid) NOT ENFORCED
 )
 PARTITIONED BY (`partition`)
 WITH (

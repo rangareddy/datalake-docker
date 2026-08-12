@@ -37,11 +37,39 @@ present:
 ./docker_build/build_docker_images.sh
 ```
 
-By default it builds `hive`, `spark`, `kafka-connect` and `kafka-cat`. The `trino`,
-`jupyter-notebook`, `xtable` and `flink` entries are commented out in the
-`image_builds` array; uncomment them to build the images the `all` profile needs.
-Versions are overridable env vars (`SPARK_VERSION`, `HIVE_VERSION`, `TRINO_VERSION`, ...)
-defined at the top of the script.
+It builds every image in the `image_builds` array: `hive`, `spark`, `kafka-connect`,
+`kafka-cat`, `trino`, `jupyter-notebook`, `xtable` and `flink`. Versions are
+overridable env vars (`SPARK_VERSION`, `HIVE_VERSION`, `TRINO_VERSION`, ...) defined
+at the top of the script. Note that `xtable` builds XTable from source with Maven, so
+it dominates the build time.
+
+## Table format versions
+
+| Component | Version | Why this version |
+| --------- | ------- | ---------------- |
+| Spark     | 3.5.5 (JDK 17) | JDK 17 because Iceberg 1.11.0 is compiled for Java 17 |
+| Flink     | 1.20.5 (java17) | Newest Flink all three formats support; there is no `flink-sql-connector-hive` for Flink 2.x, which the Hive Metastore catalogs need |
+| Trino     | 483 | Latest release |
+| Hudi      | 1.1.1 | Not 1.2.0: that release relocates its codahale metrics but keeps the `org.apache.flink.dropwizard.metrics.*` class names, which collides with Iceberg on Flink and makes the two connectors mutually exclusive |
+| Iceberg   | 1.11.0 | Latest; needs Java 17 and Flink >= 1.20 |
+| Delta     | 3.3.2 | Ceiling for Scala 2.12. Delta 4.x targets Spark 4.0 / Scala 2.13 and, on Flink, Flink 2.0 |
+
+Hudi must stay on one version across Spark, Flink, Hive and Kafka Connect, since they
+all read and write the same tables through the shared metastore.
+
+## S3 paths: `s3a://` and `s3://`
+
+Both schemes address the same MinIO buckets and are interchangeable, so a table
+written through one reads back through the other:
+
+```sql
+CREATE TABLE t1 (id INT, name STRING) USING parquet LOCATION 's3a://warehouse/t1';
+CREATE TABLE t2 (id INT, name STRING) USING parquet LOCATION 's3://warehouse/t2';
+```
+
+`s3://` is mapped onto `S3AFileSystem` in `docker_build/conf/hadoop/core-site.xml` and
+`docker_build/conf/hive/hive-site.xml`. Credentials live only under the `fs.s3a.*` keys;
+`S3AFileSystem` reads those for both schemes, so they are not duplicated per scheme.
 
 ## Components
 
