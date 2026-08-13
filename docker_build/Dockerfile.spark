@@ -36,6 +36,7 @@ ENV SPARK_VERSION=${SPARK_VERSION:-3.5.5} \
   SPARK_CONF_DIR=/etc/spark/conf \
   SPARK_LOG_DIR=${SPARK_LOG_DIR:-/var/log/spark} \
   HUDI_HOME=${HUDI_HOME:-/opt/hudi} \
+  HUDI_CONF_DIR=${HUDI_CONF_DIR:-/etc/hudi/conf} \
   HUDI_VERSION=${HUDI_VERSION:-1.1.1} \
   DELTA_HOME=${DELTA_HOME:-/opt/delta} \
   DELTA_VERSION=${DELTA_VERSION:-3.3.2} \
@@ -67,6 +68,11 @@ COPY db_connector_jars/* $SPARK_HOME/jars/
 COPY conf/spark/* $SPARK_CONF/
 COPY conf/hadoop/core-site.xml $SPARK_CONF/
 RUN mkdir -p /etc/spark && ln -sf $SPARK_CONF $SPARK_CONF_DIR
+
+# Hudi does not read $SPARK_CONF. It resolves hudi-defaults.conf from HUDI_CONF_DIR,
+# falling back to /etc/hudi/conf, so a copy that only lands in $SPARK_CONF is silently
+# ignored and every setting in it is dead. Install it where Hudi actually looks.
+RUN mkdir -p $HUDI_CONF_DIR && cp $SPARK_CONF/hudi-defaults.conf $HUDI_CONF_DIR/hudi-defaults.conf
 
 ARG ICEBERG_JAR=iceberg-spark-runtime-${SPARK_MAJOR_VERSION}_${SCALA_VERSION}-${ICEBERG_VERSION}.jar
 ARG DELTA_JAR=delta-spark_${SCALA_VERSION}-${DELTA_VERSION}.jar
