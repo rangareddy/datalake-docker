@@ -1,0 +1,131 @@
+FROM python:3.10-bullseye
+
+SHELL ["/bin/bash", "-c"]
+
+LABEL maintainer="Ranga Reddy <rangareddy.avula@gmail.com>"
+LABEL description="Datalake Spark image"
+
+# bullseye is oldstable and deb.debian.org (a CDN) periodically serves an index whose
+# bullseye-security pool has already moved on, so the install 404s on a package version
+# its own index just advertised. The base image ships pinned snapshot.debian.org lines
+# commented out for exactly this case - a frozen, internally consistent archive - so the
+# fallback switches to those rather than guessing at another mirror. Swapping in a plain
+# mirror does not work: ftp.us.debian.org carries /debian but not /debian-security.
+#
+# The explicit `java -version` is load bearing. An earlier version of this layer let a
+# failed apt through, and the image still built: wget already exists in the python base,
+# so every later layer kept working and the breakage only surfaced at runtime as
+# "java: command not found" when Spark tried to start.
+RUN set -eux; \
+  install_pkgs() { \
+    apt-get -o Acquire::Check-Valid-Until=false update && \
+      apt-get --fix-broken install -y --no-install-recommends \
+      sudo curl telnet wget tar vim ssh \
+      unzip rsync openjdk-17-jdk \
+      build-essential software-properties-common; \
+  }; \
+  if ! install_pkgs; then \
+    echo "deb.debian.org failed, falling back to the pinned snapshot archive"; \
+    sed -i -e "s|^deb http://deb.debian.org|#deb http://deb.debian.org|" \
+           -e "s|^# deb http://snapshot.debian.org|deb http://snapshot.debian.org|" \
+           /etc/apt/sources.list; \
+    rm -rf /var/lib/apt/lists/*; \
+    install_pkgs; \
+  fi; \
+  java -version; \
+  apt-get clean; \
+  rm -rf /var/lib/apt/lists/*
+
+# The Spark 3.5 image. Spark 4 lives in Dockerfile.spark4, because the two lines differ
+# in Scala binary, in which connectors exist, and in which AWS SDK S3A needs - enough
+# that one file with branches was harder to read than two files.
+ARG SPARK_VERSION=${SPARK_VERSION:-3.5.9}
+ARG SPARK_MAJOR_VERSION=${SPARK_MAJOR_VERSION:-3.5}
+ARG SCALA_VERSION=${SCALA_VERSION:-2.12}
+ARG SPARK_HOME=${SPARK_HOME:-/opt/spark}
+# This line carries all three formats:
+#
+#   Spark 3.5.x / Scala 2.12 -> Hudi 1.1.1, Iceberg 1.11.0, Delta 3.3.2
+#
+# Iceberg 1.11.0 is compiled for Java 17 (class file 61.0), which is why this image
+# installs JDK 17 rather than 11. Delta 3.3.2 is the ceiling for Scala 2.12.
+# Hudi is held at 1.1.1 rather than 1.2.0 so the same version works on Flink: 1.2.0
+# relocates its codahale metrics but keeps the org.apache.flink.dropwizard.metrics.*
+# class names, which collides with Iceberg's copy on Flink's parent-first classpath and
+# makes the two connectors mutually exclusive.
+ARG HUDI_VERSION=${HUDI_VERSION:-1.1.1}
+ARG ICEBERG_VERSION=${ICEBERG_VERSION:-1.11.0}
+ARG DELTA_VERSION=${DELTA_VERSION:-3.3.2}
+ARG APACHE_URL="https://repo1.maven.org/maven2/org/apache"
+
+ENV SPARK_VERSION=${SPARK_VERSION} \
+  SPARK_MAJOR_VERSION=${SPARK_MAJOR_VERSION} \
+  SCALA_VERSION=${SCALA_VERSION} \
+  SPARK_HOME=$SPARK_HOME \
+  SPARK_CONF=$SPARK_HOME/conf \
+  SPARK_CONF_DIR=/etc/spark/conf \
+  SPARK_LOG_DIR=${SPARK_LOG_DIR:-/var/log/spark} \
+  HUDI_HOME=${HUDI_HOME:-/opt/hudi} \
+  HUDI_CONF_DIR=${HUDI_CONF_DIR:-/etc/hudi/conf} \
+  HUDI_VERSION=${HUDI_VERSION} \
+  DELTA_HOME=${DELTA_HOME:-/opt/delta} \
+  DELTA_VERSION=${DELTA_VERSION} \
+  ICEBERG_HOME=${ICEBERG_HOME:-/opt/iceberg} \
+  ICEBERG_VERSION=${ICEBERG_VERSION} \
+  PATH="${SPARK_HOME}/sbin:${SPARK_HOME}/bin:${PATH}"
+
+COPY requirements.txt /tmp/requirements.txt
+RUN  pip install --upgrade pip && \
+  pip install faker && \
+  pip install --no-cache-dir -r /tmp/requirements.txt && \
+  python3 -m spylon_kernel install && \
+  curl -s https://github.com/SpencerPark/IJava/releases/download/v1.3.0/ijava-1.3.0.zip -Lo ijava-1.3.0.zip \
+  && unzip ijava-1.3.0.zip \
+  && python3 install.py --sys-prefix \
+  && rm ijava-1.3.0.zip
+
+COPY software/spark-${SPARK_VERSION}-bin-hadoop3.tgz /tmp/spark-${SPARK_VERSION}-bin-hadoop3.tgz
+
+RUN mkdir -p ${SPARK_HOME} && \
+  mkdir -p ${SPARK_HOME}/spark-events && \
+  mkdir -p $SPARK_LOG_DIR && \
+  tar xzf /tmp/spark-${SPARK_VERSION}-bin-hadoop3.tgz --directory ${SPARK_HOME} --strip-components 1 && \
+  rm -rf /tmp/spark-${SPARK_VERSION}-bin-hadoop3.tgz && \
+  wget -P $SPARK_HOME/jars/ $APACHE_URL/spark/spark-avro_${SCALA_VERSION}/${SPARK_VERSION}/spark-avro_${SCALA_VERSION}-${SPARK_VERSION}.jar
+
+COPY hadoop-s3-jars/* $SPARK_HOME/jars/
+COPY db_connector_jars/* $SPARK_HOME/jars/
+COPY conf/spark/* $SPARK_CONF/
+COPY conf/hadoop/core-site.xml $SPARK_CONF/
+RUN mkdir -p /etc/spark && ln -sf $SPARK_CONF $SPARK_CONF_DIR
+
+# Hudi does not read $SPARK_CONF. It resolves hudi-defaults.conf from HUDI_CONF_DIR,
+# falling back to /etc/hudi/conf, so a copy that only lands in $SPARK_CONF is silently
+# ignored and every setting in it is dead. Install it where Hudi actually looks.
+RUN mkdir -p $HUDI_CONF_DIR && cp $SPARK_CONF/hudi-defaults.conf $HUDI_CONF_DIR/hudi-defaults.conf
+
+ARG ICEBERG_JAR=iceberg-spark-runtime-${SPARK_MAJOR_VERSION}_${SCALA_VERSION}-${ICEBERG_VERSION}.jar
+ARG DELTA_JAR=delta-spark_${SCALA_VERSION}-${DELTA_VERSION}.jar
+# delta-spark alone is not runnable: it needs delta-storage for the LogStore, otherwise
+# any Delta write fails with NoClassDefFoundError io/delta/storage/commit/actions/AbstractProtocol
+ARG DELTA_STORAGE_JAR=delta-storage-${DELTA_VERSION}.jar
+ARG HUDI_JAR=hudi-spark${SPARK_MAJOR_VERSION}-bundle_${SCALA_VERSION}-${HUDI_VERSION}.jar
+
+RUN mkdir -p $HUDI_HOME $DELTA_HOME $ICEBERG_HOME && \
+  wget -P $ICEBERG_HOME $APACHE_URL/iceberg/iceberg-spark-runtime-${SPARK_MAJOR_VERSION}_${SCALA_VERSION}/$ICEBERG_VERSION/$ICEBERG_JAR && \
+  wget -P $DELTA_HOME/ https://repo1.maven.org/maven2/io/delta/delta-spark_${SCALA_VERSION}/${DELTA_VERSION}/$DELTA_JAR && \
+  wget -P $DELTA_HOME/ https://repo1.maven.org/maven2/io/delta/delta-storage/${DELTA_VERSION}/$DELTA_STORAGE_JAR && \
+  wget -P $HUDI_HOME/ ${APACHE_URL}/hudi/hudi-hive-sync/${HUDI_VERSION}/hudi-hive-sync-${HUDI_VERSION}.jar  && \
+  wget -P $HUDI_HOME/ ${APACHE_URL}/hudi/hudi-hive-sync-bundle/${HUDI_VERSION}/hudi-hive-sync-bundle-${HUDI_VERSION}.jar && \
+  wget -P $HUDI_HOME/ ${APACHE_URL}/hudi/hudi-hadoop-mr/${HUDI_VERSION}/hudi-hadoop-mr-${HUDI_VERSION}.jar  && \
+  wget -P $HUDI_HOME/ ${APACHE_URL}/hudi/hudi-spark${SPARK_MAJOR_VERSION}-bundle_${SCALA_VERSION}/${HUDI_VERSION}/$HUDI_JAR && \
+  wget -P $HUDI_HOME/ ${APACHE_URL}/hudi/hudi-utilities-bundle_${SCALA_VERSION}/${HUDI_VERSION}/hudi-utilities-bundle_${SCALA_VERSION}-${HUDI_VERSION}.jar && \
+  wget -P $HUDI_HOME/ ${APACHE_URL}/hudi/hudi-utilities-slim-bundle_${SCALA_VERSION}/${HUDI_VERSION}/hudi-utilities-slim-bundle_${SCALA_VERSION}-${HUDI_VERSION}.jar
+
+COPY scripts/spark/entrypoint.sh /opt/entrypoint.sh
+COPY check_service_status_utility.sh /opt/check_service_status_utility.sh
+
+RUN chmod 755 /opt/entrypoint.sh /opt/check_service_status_utility.sh
+WORKDIR $SPARK_HOME
+
+ENTRYPOINT ["/opt/entrypoint.sh"]

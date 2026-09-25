@@ -18,6 +18,18 @@ COMPOSE_CMD="$(get_docker_compose_cmd)"
 PLATFORM="$(get_docker_platform)"
 export PLATFORM
 
+# Spark 3 and Spark 4 are separate images: ranga-spark keeps the original name so older
+# pulls keep working, and ranga-spark4 is the new line. Derive which one this
+# SPARK_VERSION wants so the stack starts the matching image without anyone editing
+# .env; an explicit SPARK_IMAGE still wins.
+if [ -z "${SPARK_IMAGE:-}" ]; then
+    case "${SPARK_VERSION:-}" in
+    4.*) SPARK_IMAGE="ranga-spark4" ;;
+    *) SPARK_IMAGE="ranga-spark" ;;
+    esac
+fi
+export SPARK_IMAGE
+
 # PROFILE=core (default) starts docker-compose.yml.
 # PROFILE=all starts docker-compose_all.yml, which adds MySQL, Trino, Jupyter, XTable and Flink.
 PROFILE="${PROFILE:-core}"

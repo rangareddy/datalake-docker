@@ -53,6 +53,25 @@ case "$SPARK_MAJOR_VERSION" in
   exit 1
   ;;
 esac
+
+# Spark 3 and Spark 4 are separate Dockerfiles, because the two lines differ in Scala
+# binary, in which connectors exist and in which AWS SDK S3A needs.
+#
+# The Spark 3 image keeps its original name, ranga-spark, so existing pulls and compose
+# files carry on working; only the new line is prefixed. SPARK_IMAGE is what Compose
+# resolves, so it has to agree with whatever was built.
+case "$SPARK_MAJOR_VERSION" in
+4.*)
+  SPARK_IMAGE_NAME="spark4"
+  SPARK_DOCKERFILE="spark4"
+  ;;
+*)
+  SPARK_IMAGE_NAME="spark"
+  SPARK_DOCKERFILE="spark3"
+  ;;
+esac
+SPARK_IMAGE="ranga-${SPARK_IMAGE_NAME}"
+export SPARK_IMAGE
 KAFKA_CONNECT_VERSION=${KAFKA_CONNECT_VERSION:-7.4.7}
 CONFLUENT_KAFKACAT_VERSION=${CONFLUENT_KAFKACAT_VERSION:-7.1.15}
 HADOOP_AWS_JARS_PATH="$CURRENT_DIR/hadoop-s3-jars"
@@ -155,11 +174,14 @@ build_docker_image() {
   local image_name="$1"
   local image_version="$2"
   local dockerfile="$3"
+  local version_arg_override="${4:-}" # e.g. spark3 still takes SPARK_VERSION, not SPARK3_VERSION
   shift 3
+  [ -n "$version_arg_override" ] && shift
   local extra_args=("$@") # further --build-arg pairs, e.g. the Spark version matrix
 
   version_arg=$(echo "${image_name}_VERSION" | tr '[:lower:]' '[:upper:]')
   local image_version_str="${version_arg//-/_}"
+  [ -n "$version_arg_override" ] && image_version_str="$version_arg_override"
   if docker build --build-arg "$image_version_str=$image_version" "${extra_args[@]}" --platform linux/"$ARCH" -f "$CURRENT_DIR/Dockerfile.$dockerfile" "$CURRENT_DIR" -t "$DOCKER_HUB_USERNAME/ranga-$image_name:$image_version" -t "$DOCKER_HUB_USERNAME/ranga-$image_name:latest"; then
     echo "Successfully built $image_name:$image_version"
   else
@@ -170,7 +192,7 @@ build_docker_image() {
 
 declare -a image_builds=(
   "hive $HIVE_VERSION hive"
-  "spark $SPARK_VERSION spark"
+  "$SPARK_IMAGE_NAME $SPARK_VERSION $SPARK_DOCKERFILE"
   "kafka-connect $KAFKA_CONNECT_VERSION kafka_connect"
   "kafka-cat $CONFLUENT_KAFKACAT_VERSION kafka_cat"
   "trino $TRINO_VERSION trino"
@@ -182,9 +204,15 @@ declare -a image_builds=(
 # Iterate through the array and build images
 for build_config in "${image_builds[@]}"; do
   IFS=' ' read -r image_name version dockerfile_ext <<<"$build_config"
-  should_build "$image_name" || continue
-  if [ "$image_name" = "spark" ]; then
-    build_docker_image "$image_name" "$version" "$dockerfile_ext" \
+  # "spark" selects whichever of spark3/spark4 this SPARK_VERSION resolves to, so the
+  # familiar IMAGES=spark keeps working alongside IMAGES=spark4.
+  if [ -n "$IMAGES" ] && [ "$image_name" = "$SPARK_IMAGE_NAME" ] && should_build spark; then
+    :
+  else
+    should_build "$image_name" || continue
+  fi
+  if [ "$image_name" = "$SPARK_IMAGE_NAME" ]; then
+    build_docker_image "$image_name" "$version" "$dockerfile_ext" SPARK_VERSION \
       --build-arg "SPARK_MAJOR_VERSION=$SPARK_MAJOR_VERSION" \
       --build-arg "SCALA_VERSION=$SCALA_VERSION" \
       --build-arg "HUDI_VERSION=$HUDI_VERSION" \

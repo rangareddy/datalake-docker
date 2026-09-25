@@ -44,6 +44,20 @@ dictates the Scala binary, the bundled Hadoop, and which builds of the three for
 Those are the only two lines; anything else exits with an error rather than being built
 against a guessed Scala binary.
 
+Each line has its own Dockerfile and image, because they differ in Scala binary, in which
+connectors exist, and in which AWS SDK S3A wants - enough that one file with branches read
+worse than two files:
+
+| Line | Dockerfile | Image |
+| --- | --- | --- |
+| 3.5.x | `Dockerfile.spark3` | `ranga-spark` (unchanged, so old pulls still work) |
+| 4.1.x | `Dockerfile.spark4` | `ranga-spark4` |
+
+`build_docker_images.sh` sets `SPARK_IMAGE` from `SPARK_VERSION` and `run_datalake.sh`
+derives the same value, so the compose files resolve
+`rangareddy1988/${SPARK_IMAGE:-ranga-spark}:${SPARK_VERSION}` without being edited. Both
+compose files were updated together, as every shared service change must be.
+
 Any of the derived values can still be overridden individually, but the defaults are chosen so
 the three connectors agree. Two constraints are worth keeping in mind before changing them:
 
@@ -51,13 +65,13 @@ the three connectors agree. Two constraints are worth keeping in mind before cha
   dies with `NoClassDefFoundError org/apache/parquet/variant/VariantConverters` because Spark
   4.1.3 ships Parquet 1.16.0 without that class while the bundle is built against 1.15.x;
   Delta 4.0.0 dies with `NoSuchMethodError org.apache.spark.internal.LogKey.$init$` and has no
-  Scala 2.13 build past 4.0.0. `Dockerfile.spark` skips a format whose version arg is empty,
+  Scala 2.13 build past 4.0.0. `Dockerfile.spark4` ships neither, and both Dockerfiles skip a format whose version arg is empty,
   which is how the profile is expressed, and the smoke test reports those as skipped rather
   than failed. Use 3.5.9 when all three formats are needed.
 - **S3A changes SDK between the profiles.** Hadoop 3.3.x uses AWS SDK v1
   (`com.amazonaws:aws-java-sdk-bundle`), Hadoop 3.4.x uses SDK v2 (`software.amazon.awssdk:bundle`).
   `download_hadoop_aws_jars` caches per Hadoop version under `.s3-jar-cache/<version>/` and then
-  stages a clean `hadoop-s3-jars/`, because `Dockerfile.spark` COPYs that directory wholesale and a
+  stages a clean `hadoop-s3-jars/`, because both Spark Dockerfiles COPY that directory wholesale and a
   leftover v1 bundle would shadow the v2 classes in a Spark 4 image.
 
 When switching profiles, `docker_run/.env` has to move too — Compose resolves
@@ -87,7 +101,7 @@ Build one image manually:
 ```sh
 cd docker_build && docker build --build-arg SPARK_VERSION=3.5.9 \
   --platform "$(source ./validate_docker_status.sh >/dev/null 2>&1; get_docker_platform)" \
-  -f Dockerfile.spark . -t rangareddy1988/ranga-spark:3.5.9
+  -f Dockerfile.spark3 . -t rangareddy1988/ranga-spark:3.5.9
 ```
 
 ## Architecture

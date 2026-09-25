@@ -3,7 +3,7 @@ FROM python:3.10-bullseye
 SHELL ["/bin/bash", "-c"]
 
 LABEL maintainer="Ranga Reddy <rangareddy.avula@gmail.com>"
-LABEL description="Datalake Spark image"
+LABEL description="Datalake Spark 4 image"
 
 # bullseye is oldstable and deb.debian.org (a CDN) periodically serves an index whose
 # bullseye-security pool has already moved on, so the install 404s on a package version
@@ -36,27 +36,34 @@ RUN set -eux; \
   apt-get clean; \
   rm -rf /var/lib/apt/lists/*
 
-ARG SPARK_VERSION=${SPARK_VERSION:-3.5.9}
-ARG SPARK_MAJOR_VERSION=${SPARK_MAJOR_VERSION:-3.5}
-ARG SCALA_VERSION=${SCALA_VERSION:-2.12}
+# The Spark 4 image. Spark 3.5 lives in Dockerfile.spark3.
+#
+#   Spark 4.1.x / Scala 2.13 -> Iceberg 1.11.0 only
+#
+# Spark 4 requires JDK 17 as a minimum, which this base already installs.
+#
+# This image deliberately ships no Hudi and no Delta. Both were built against Spark
+# 4.1.3 and run, and both fail at the first statement:
+#
+#   Hudi 1.2.0   NoClassDefFoundError org/apache/parquet/variant/VariantConverters
+#                Spark 4.1.3 ships Parquet 1.16.0, which no longer has that class,
+#                while hudi-spark4.1-bundle is compiled against 1.15.x and bundles
+#                parquet classes that still reference it.
+#   Delta 4.0.0  NoSuchMethodError org.apache.spark.internal.LogKey.$init$
+#                Spark 4.1 changed an internal trait Delta 4.0.0 was compiled against,
+#                and Delta publishes no Scala 2.13 build past 4.0.0.
+#
+# Shipping jars that throw on first use is worse than leaving them out, because the
+# failure then looks like a configuration problem. Setting HUDI_VERSION or DELTA_VERSION
+# at build time re-enables them, which is the one-line change once upstream publishes
+# Spark 4.1 builds.
+ARG SPARK_VERSION=${SPARK_VERSION:-4.1.3}
+ARG SPARK_MAJOR_VERSION=${SPARK_MAJOR_VERSION:-4.1}
+ARG SCALA_VERSION=${SCALA_VERSION:-2.13}
 ARG SPARK_HOME=${SPARK_HOME:-/opt/spark}
-# Two supported profiles, chosen by build_docker_images.sh from SPARK_VERSION:
-#
-#   Spark 3.5.x / Scala 2.12 -> Hudi 1.1.1, Iceberg 1.11.0, Delta 3.3.2
-#   Spark 4.1.x / Scala 2.13 -> Hudi 1.2.0, Iceberg 1.11.0, Delta 4.0.0
-#
-# Iceberg 1.11.0 is compiled for Java 17 (class file 61.0), which is why this image
-# installs JDK 17 rather than 11; Spark 4 requires 17 as a minimum in any case.
-# Delta 3.3.2 is the ceiling for Scala 2.12, and 4.0.0 is the newest Scala 2.13 build
-# there is, so the Spark 4.1 profile ships Delta 4.0.0 - see the README for what that
-# supports in practice.
-# On the 3.5 profile Hudi is held at 1.1.1 rather than 1.2.0 so the same version works
-# on Flink: 1.2.0 relocates its codahale metrics but keeps the
-# org.apache.flink.dropwizard.metrics.* class names, which collides with Iceberg's copy
-# on Flink's parent-first classpath and makes the two connectors mutually exclusive.
-ARG HUDI_VERSION=${HUDI_VERSION:-1.1.1}
 ARG ICEBERG_VERSION=${ICEBERG_VERSION:-1.11.0}
-ARG DELTA_VERSION=${DELTA_VERSION:-3.3.2}
+ARG HUDI_VERSION=${HUDI_VERSION:-}
+ARG DELTA_VERSION=${DELTA_VERSION:-}
 ARG APACHE_URL="https://repo1.maven.org/maven2/org/apache"
 
 ENV SPARK_VERSION=${SPARK_VERSION} \
@@ -94,6 +101,9 @@ RUN mkdir -p ${SPARK_HOME} && \
   rm -rf /tmp/spark-${SPARK_VERSION}-bin-hadoop3.tgz && \
   wget -P $SPARK_HOME/jars/ $APACHE_URL/spark/spark-avro_${SCALA_VERSION}/${SPARK_VERSION}/spark-avro_${SCALA_VERSION}-${SPARK_VERSION}.jar
 
+# Staged by build_docker_images.sh: for this line that is hadoop-aws 3.4.x plus the AWS
+# SDK v2 bundle. Hadoop 3.4 dropped SDK v1, so a v1 bundle left over from a Spark 3 build
+# would shadow the v2 classes and every s3a:// call would fail on a missing class.
 COPY hadoop-s3-jars/* $SPARK_HOME/jars/
 COPY db_connector_jars/* $SPARK_HOME/jars/
 COPY conf/spark/* $SPARK_CONF/
@@ -101,20 +111,17 @@ COPY conf/hadoop/core-site.xml $SPARK_CONF/
 RUN mkdir -p /etc/spark && ln -sf $SPARK_CONF $SPARK_CONF_DIR
 
 # Hudi does not read $SPARK_CONF. It resolves hudi-defaults.conf from HUDI_CONF_DIR,
-# falling back to /etc/hudi/conf, so a copy that only lands in $SPARK_CONF is silently
-# ignored and every setting in it is dead. Install it where Hudi actually looks.
+# falling back to /etc/hudi/conf. Kept here so the file is already in the right place if
+# Hudi is re-enabled on this line.
 RUN mkdir -p $HUDI_CONF_DIR && cp $SPARK_CONF/hudi-defaults.conf $HUDI_CONF_DIR/hudi-defaults.conf
 
 ARG ICEBERG_JAR=iceberg-spark-runtime-${SPARK_MAJOR_VERSION}_${SCALA_VERSION}-${ICEBERG_VERSION}.jar
 ARG DELTA_JAR=delta-spark_${SCALA_VERSION}-${DELTA_VERSION}.jar
-# delta-spark alone is not runnable: it needs delta-storage for the LogStore, otherwise
-# any Delta write fails with NoClassDefFoundError io/delta/storage/commit/actions/AbstractProtocol
 ARG DELTA_STORAGE_JAR=delta-storage-${DELTA_VERSION}.jar
 ARG HUDI_JAR=hudi-spark${SPARK_MAJOR_VERSION}-bundle_${SCALA_VERSION}-${HUDI_VERSION}.jar
 
-# Hudi and Delta are skipped when their version is empty, which is how the Spark 4.1
-# profile is expressed: neither has a build that runs on Spark 4.1 yet, so the image
-# ships Iceberg alone rather than jars that fail at the first statement.
+# $HUDI_HOME and $DELTA_HOME are created empty rather than omitted, so scripts that glob
+# them (demos/run_demo.sh, the smoke test) see "no jars" instead of "no such directory".
 RUN set -eux; \
   mkdir -p $HUDI_HOME $DELTA_HOME $ICEBERG_HOME; \
   wget -P $ICEBERG_HOME $APACHE_URL/iceberg/iceberg-spark-runtime-${SPARK_MAJOR_VERSION}_${SCALA_VERSION}/$ICEBERG_VERSION/$ICEBERG_JAR; \
@@ -122,7 +129,7 @@ RUN set -eux; \
     wget -P $DELTA_HOME/ https://repo1.maven.org/maven2/io/delta/delta-spark_${SCALA_VERSION}/${DELTA_VERSION}/$DELTA_JAR; \
     wget -P $DELTA_HOME/ https://repo1.maven.org/maven2/io/delta/delta-storage/${DELTA_VERSION}/$DELTA_STORAGE_JAR; \
   else \
-    echo "DELTA_VERSION empty - skipping Delta for this Spark line"; \
+    echo "DELTA_VERSION empty - no Delta build runs on Spark 4.1 yet, skipping"; \
   fi; \
   if [ -n "${HUDI_VERSION}" ]; then \
     wget -P $HUDI_HOME/ ${APACHE_URL}/hudi/hudi-hive-sync/${HUDI_VERSION}/hudi-hive-sync-${HUDI_VERSION}.jar; \
@@ -132,7 +139,7 @@ RUN set -eux; \
     wget -P $HUDI_HOME/ ${APACHE_URL}/hudi/hudi-utilities-bundle_${SCALA_VERSION}/${HUDI_VERSION}/hudi-utilities-bundle_${SCALA_VERSION}-${HUDI_VERSION}.jar; \
     wget -P $HUDI_HOME/ ${APACHE_URL}/hudi/hudi-utilities-slim-bundle_${SCALA_VERSION}/${HUDI_VERSION}/hudi-utilities-slim-bundle_${SCALA_VERSION}-${HUDI_VERSION}.jar; \
   else \
-    echo "HUDI_VERSION empty - skipping Hudi for this Spark line"; \
+    echo "HUDI_VERSION empty - no Hudi build runs on Spark 4.1 yet, skipping"; \
   fi
 
 COPY scripts/spark/entrypoint.sh /opt/entrypoint.sh

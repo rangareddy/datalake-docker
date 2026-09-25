@@ -89,10 +89,24 @@ The build supports two profiles, selected by `SPARK_VERSION`. Everything else fo
 it, because the Spark line dictates the Scala binary, the bundled Hadoop, and which builds
 of Hudi, Iceberg and Delta exist:
 
-| `SPARK_VERSION` | Scala | Hadoop | Hudi  | Iceberg | Delta |
-| --------------- | ----- | ------ | ----- | ------- | ----- |
-| `3.5.9` (default) | 2.12 | 3.3.4 | 1.1.1 | 1.11.0 | 3.3.2 |
-| `4.1.3`           | 2.13 | 3.4.2 | —     | 1.11.0 | —     |
+Each line has its own Dockerfile and its own image. The Spark 3 image keeps the original
+name so existing pulls and compose files carry on working; only the new line is prefixed.
+
+| `SPARK_VERSION` | Dockerfile | Image | Scala | Hadoop | Hudi  | Iceberg | Delta |
+| --------------- | ---------- | ----- | ----- | ------ | ----- | ------- | ----- |
+| `3.5.9` (default) | `Dockerfile.spark3` | `ranga-spark` | 2.12 | 3.3.4 | 1.1.1 | 1.11.0 | 3.3.2 |
+| `4.1.3`           | `Dockerfile.spark4` | `ranga-spark4` | 2.13 | 3.4.2 | — | 1.11.0 | — |
+
+`run_datalake.sh` picks the matching image from `SPARK_VERSION`, so switching lines is one
+variable and never an edit to the compose files:
+
+```sh
+SPARK_VERSION=3.5.9 sh docker_run/run_datalake.sh restart   # ranga-spark
+SPARK_VERSION=4.1.3 sh docker_run/run_datalake.sh restart   # ranga-spark4
+```
+
+`IMAGES=spark` builds whichever line `SPARK_VERSION` selects, and `IMAGES=spark4` names
+the Spark 4 image directly.
 
 Any other Spark line is refused rather than built against a guessed Scala binary.
 
@@ -142,7 +156,7 @@ To rebuild one image only, for example after editing a config file:
 cd docker_build
 docker build --build-arg SPARK_VERSION=3.5.9 \
   --platform "$(source ./validate_docker_status.sh >/dev/null 2>&1; get_docker_platform)" \
-  -f "$PWD/Dockerfile.spark" "$PWD" \
+  -f "$PWD/Dockerfile.spark3" "$PWD" \
   -t rangareddy1988/ranga-spark:3.5.9 -t rangareddy1988/ranga-spark:latest
 ```
 

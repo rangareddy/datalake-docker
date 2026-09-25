@@ -257,7 +257,7 @@ services:
       - datalake
 
   spark-master:
-    image: rangareddy1988/ranga-spark:${SPARK_VERSION:-latest}
+    image: rangareddy1988/${SPARK_IMAGE:-ranga-spark}:${SPARK_VERSION:-latest}
     platform: ${PLATFORM:-linux/amd64}
     container_name: spark-master
     restart: unless-stopped
@@ -288,7 +288,7 @@ services:
       - datalake
 
   spark-worker:
-    image: rangareddy1988/ranga-spark:${SPARK_VERSION:-latest}
+    image: rangareddy1988/${SPARK_IMAGE:-ranga-spark}:${SPARK_VERSION:-latest}
     platform: ${PLATFORM:-linux/amd64}
     container_name: spark-worker
     restart: unless-stopped
