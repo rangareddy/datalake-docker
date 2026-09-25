@@ -373,7 +373,7 @@ services:
       - datalake
 
   minio:
-    image: minio/minio
+    image: quay.io/minio/minio:${MINIO_VERSION:-latest}
     platform: ${PLATFORM:-linux/amd64}
     container_name: minio
     restart: unless-stopped
@@ -399,7 +399,7 @@ services:
           - warehouse.minio
 
   mc:
-    image: minio/mc
+    image: quay.io/minio/mc:${MINIO_MC_VERSION:-latest}
     platform: ${PLATFORM:-linux/amd64}
     container_name: mc
     depends_on:

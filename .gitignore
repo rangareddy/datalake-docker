@@ -25,3 +25,6 @@ docker_build/lib/
 
 docker_run/logs
 docker_run/data
+
+# staged AWS/Hadoop S3 jars, cached per Hadoop version
+.s3-jar-cache/

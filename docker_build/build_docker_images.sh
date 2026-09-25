@@ -9,7 +9,32 @@ CURRENT_DIR="$(
 DOCKER_HUB_USERNAME="rangareddy1988"
 HIVE_VERSION=${HIVE_VERSION:-4.0.0}
 SPARK_VERSION=${SPARK_VERSION:-3.5.5}
-SCALA_VERSION=${SCALA_VERSION:-2.12}
+
+# Everything below follows from SPARK_VERSION, because the Spark line dictates the
+# Scala binary, the bundled Hadoop, and which builds of Hudi/Iceberg/Delta exist.
+#
+#   Spark 3.5.x -> Scala 2.12, Hadoop 3.3.4, Hudi 1.1.1, Iceberg 1.11.0, Delta 3.3.2
+#   Spark 4.0.x -> Scala 2.13, Hadoop 3.4.1, Hudi 1.2.0, Iceberg 1.11.0, Delta 4.0.0
+#
+# Spark 4.1 is deliberately not a profile: Delta publishes no Scala 2.13 build past
+# 4.0.0, so a 4.1 image would lose Delta and this stack needs all three formats.
+SPARK_MAJOR_VERSION=${SPARK_MAJOR_VERSION:-$(echo "$SPARK_VERSION" | cut -d. -f1,2)}
+case "$SPARK_MAJOR_VERSION" in
+4.*)
+  SCALA_VERSION=${SCALA_VERSION:-2.13}
+  HADOOP_VERSION=${HADOOP_VERSION:-3.4.1}
+  HUDI_VERSION=${HUDI_VERSION:-1.2.0}
+  DELTA_VERSION=${DELTA_VERSION:-4.0.0}
+  ICEBERG_VERSION=${ICEBERG_VERSION:-1.11.0}
+  ;;
+*)
+  SCALA_VERSION=${SCALA_VERSION:-2.12}
+  HADOOP_VERSION=${HADOOP_VERSION:-3.3.4}
+  HUDI_VERSION=${HUDI_VERSION:-1.1.1}
+  DELTA_VERSION=${DELTA_VERSION:-3.3.2}
+  ICEBERG_VERSION=${ICEBERG_VERSION:-1.11.0}
+  ;;
+esac
 KAFKA_CONNECT_VERSION=${KAFKA_CONNECT_VERSION:-7.4.7}
 CONFLUENT_KAFKACAT_VERSION=${CONFLUENT_KAFKACAT_VERSION:-7.1.15}
 HADOOP_AWS_JARS_PATH="$CURRENT_DIR/hadoop-s3-jars"
@@ -19,25 +44,58 @@ TRINO_VERSION=${TRINO_VERSION:-483}
 JUPYTER_VERSION=${JUPYTER_VERSION:-latest}
 XTABLE_VERSION=${XTABLE_VERSION:-0.3.0}
 FLINK_VERSION=${FLINK_VERSION:-1.20.5}
+# Hadoop 3.3.x S3A uses AWS SDK v1 (com.amazonaws:aws-java-sdk-bundle); Hadoop 3.4.x
+# switched to SDK v2 (software.amazon.awssdk:bundle). Shipping the wrong one gives a
+# ClassNotFoundException on the first s3a:// call, so the profile picks.
 AWS_JAVA_SDK_VERSION=${AWS_JAVA_SDK_VERSION:-1.12.262}
-HADOOP_VERSION=${HADOOP_VERSION:-3.3.4}
+AWS_SDK_V2_VERSION=${AWS_SDK_V2_VERSION:-2.24.6}
 MVN_REPO_URL="https://repo1.maven.org/maven2"
 
+
+# IMAGES limits the run to a subset, space or comma separated. Building all eight
+# takes a long time (xtable clones and mvn-installs from source), so a targeted
+# rebuild after touching one Dockerfile is:
+#
+#   IMAGES=spark SPARK_VERSION=4.0.2 ./docker_build/build_docker_images.sh
+IMAGES=${IMAGES:-}
+should_build() {
+  [ -z "$IMAGES" ] && return 0
+  case " $(echo "$IMAGES" | tr ',' ' ') " in *" $1 "*) return 0 ;; *) return 1 ;; esac
+}
 
 # shellcheck source=/dev/null
 source $CURRENT_DIR/validate_docker_status.sh
 
 download_hadoop_aws_jars() {
-  AWS_JAVA_SDK_JAR="aws-java-sdk-bundle-${AWS_JAVA_SDK_VERSION}.jar"
+  # Cache per Hadoop version, then stage a clean flat directory for the Docker build
+  # context. Staging matters: the Spark image COPYs hadoop-s3-jars/* wholesale, so a
+  # leftover SDK v1 bundle from a Spark 3.5 build would land in a Spark 4 image and
+  # shadow the v2 classes.
+  local cache="$CURRENT_DIR/.s3-jar-cache/$HADOOP_VERSION"
+  mkdir -p "$cache"
 
+  if [ ! -f "$cache/hadoop-aws-${HADOOP_VERSION}.jar" ]; then
+    wget -P "$cache" $MVN_REPO_URL/org/apache/hadoop/hadoop-aws/${HADOOP_VERSION}/hadoop-aws-${HADOOP_VERSION}.jar
+  fi
+
+  case "$HADOOP_VERSION" in
+  3.4.* | 3.5.*)
+    AWS_SDK_JAR="bundle-${AWS_SDK_V2_VERSION}.jar"
+    if [ ! -f "$cache/$AWS_SDK_JAR" ]; then
+      wget -P "$cache" $MVN_REPO_URL/software/amazon/awssdk/bundle/${AWS_SDK_V2_VERSION}/${AWS_SDK_JAR}
+    fi
+    ;;
+  *)
+    AWS_SDK_JAR="aws-java-sdk-bundle-${AWS_JAVA_SDK_VERSION}.jar"
+    if [ ! -f "$cache/$AWS_SDK_JAR" ]; then
+      wget -P "$cache" $MVN_REPO_URL/com/amazonaws/aws-java-sdk-bundle/${AWS_JAVA_SDK_VERSION}/${AWS_SDK_JAR}
+    fi
+    ;;
+  esac
+
+  rm -rf "$HADOOP_AWS_JARS_PATH"
   mkdir -p "$HADOOP_AWS_JARS_PATH"
-  if [ ! -f "$HADOOP_AWS_JARS_PATH/$AWS_JAVA_SDK_JAR" ]; then
-    wget -P "$HADOOP_AWS_JARS_PATH" $MVN_REPO_URL/com/amazonaws/aws-java-sdk-bundle/${AWS_JAVA_SDK_VERSION}/${AWS_JAVA_SDK_JAR}
-  fi
-
-  if [ ! -f "$HADOOP_AWS_JARS_PATH"/hadoop-aws-${HADOOP_VERSION}.jar ]; then
-    wget -P "$HADOOP_AWS_JARS_PATH" $MVN_REPO_URL/org/apache/hadoop/hadoop-aws/${HADOOP_VERSION}/hadoop-aws-${HADOOP_VERSION}.jar
-  fi
+  cp "$cache"/*.jar "$HADOOP_AWS_JARS_PATH"/
 }
 
 download_db_connector_jars() {
@@ -68,7 +126,7 @@ download_software_tars() {
 ARCH=$(get_docker_architecture)
 
 #sh download_and_build_hudi.sh
-sh $CURRENT_DIR/download_flink_jars.sh
+should_build flink && sh $CURRENT_DIR/download_flink_jars.sh
 
 download_software_tars
 download_hadoop_aws_jars
@@ -79,10 +137,12 @@ build_docker_image() {
   local image_name="$1"
   local image_version="$2"
   local dockerfile="$3"
+  shift 3
+  local extra_args=("$@") # further --build-arg pairs, e.g. the Spark version matrix
 
   version_arg=$(echo "${image_name}_VERSION" | tr '[:lower:]' '[:upper:]')
   local image_version_str="${version_arg//-/_}"
-  if docker build --build-arg "$image_version_str=$image_version" --platform linux/"$ARCH" -f "$CURRENT_DIR/Dockerfile.$dockerfile" "$CURRENT_DIR" -t "$DOCKER_HUB_USERNAME/ranga-$image_name:$image_version" -t "$DOCKER_HUB_USERNAME/ranga-$image_name:latest"; then
+  if docker build --build-arg "$image_version_str=$image_version" "${extra_args[@]}" --platform linux/"$ARCH" -f "$CURRENT_DIR/Dockerfile.$dockerfile" "$CURRENT_DIR" -t "$DOCKER_HUB_USERNAME/ranga-$image_name:$image_version" -t "$DOCKER_HUB_USERNAME/ranga-$image_name:latest"; then
     echo "Successfully built $image_name:$image_version"
   else
     echo "Failed to build $image_name:$image_version"
@@ -104,7 +164,17 @@ declare -a image_builds=(
 # Iterate through the array and build images
 for build_config in "${image_builds[@]}"; do
   IFS=' ' read -r image_name version dockerfile_ext <<<"$build_config"
-  build_docker_image "$image_name" "$version" "$dockerfile_ext"
+  should_build "$image_name" || continue
+  if [ "$image_name" = "spark" ]; then
+    build_docker_image "$image_name" "$version" "$dockerfile_ext" \
+      --build-arg "SPARK_MAJOR_VERSION=$SPARK_MAJOR_VERSION" \
+      --build-arg "SCALA_VERSION=$SCALA_VERSION" \
+      --build-arg "HUDI_VERSION=$HUDI_VERSION" \
+      --build-arg "ICEBERG_VERSION=$ICEBERG_VERSION" \
+      --build-arg "DELTA_VERSION=$DELTA_VERSION"
+  else
+    build_docker_image "$image_name" "$version" "$dockerfile_ext"
+  fi
 done
 
 # Prune unused Docker images

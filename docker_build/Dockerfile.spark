@@ -5,23 +5,52 @@ SHELL ["/bin/bash", "-c"]
 LABEL maintainer="Ranga Reddy <rangareddy.avula@gmail.com>"
 LABEL description="Datalake Spark image"
 
-RUN set -ex; \
-  apt-get update && \
-  apt-get --fix-broken install -y --no-install-recommends \
-  sudo curl telnet wget tar vim ssh \
-  unzip rsync openjdk-17-jdk \
-  build-essential software-properties-common && \
-  apt-get clean && \
+# bullseye is oldstable and deb.debian.org (a CDN) periodically serves an index whose
+# bullseye-security pool has already moved on, so the install 404s on a package version
+# its own index just advertised. The base image ships pinned snapshot.debian.org lines
+# commented out for exactly this case - a frozen, internally consistent archive - so the
+# fallback switches to those rather than guessing at another mirror. Swapping in a plain
+# mirror does not work: ftp.us.debian.org carries /debian but not /debian-security.
+#
+# The explicit `java -version` is load bearing. An earlier version of this layer let a
+# failed apt through, and the image still built: wget already exists in the python base,
+# so every later layer kept working and the breakage only surfaced at runtime as
+# "java: command not found" when Spark tried to start.
+RUN set -eux; \
+  install_pkgs() { \
+    apt-get -o Acquire::Check-Valid-Until=false update && \
+      apt-get --fix-broken install -y --no-install-recommends \
+      sudo curl telnet wget tar vim ssh \
+      unzip rsync openjdk-17-jdk \
+      build-essential software-properties-common; \
+  }; \
+  if ! install_pkgs; then \
+    echo "deb.debian.org failed, falling back to the pinned snapshot archive"; \
+    sed -i -e "s|^deb http://deb.debian.org|#deb http://deb.debian.org|" \
+           -e "s|^# deb http://snapshot.debian.org|deb http://snapshot.debian.org|" \
+           /etc/apt/sources.list; \
+    rm -rf /var/lib/apt/lists/*; \
+    install_pkgs; \
+  fi; \
+  java -version; \
+  apt-get clean; \
   rm -rf /var/lib/apt/lists/*
 
 ARG SPARK_VERSION=${SPARK_VERSION:-3.5.5}
+ARG SPARK_MAJOR_VERSION=${SPARK_MAJOR_VERSION:-3.5}
 ARG SCALA_VERSION=${SCALA_VERSION:-2.12}
 ARG SPARK_HOME=${SPARK_HOME:-/opt/spark}
-# Latest releases supporting Spark 3.5 / Scala 2.12.
+# Two supported profiles, chosen by build_docker_images.sh from SPARK_VERSION:
+#
+#   Spark 3.5.x / Scala 2.12 -> Hudi 1.1.1, Iceberg 1.11.0, Delta 3.3.2
+#   Spark 4.0.x / Scala 2.13 -> Hudi 1.2.0, Iceberg 1.11.0, Delta 4.0.0
+#
 # Iceberg 1.11.0 is compiled for Java 17 (class file 61.0), which is why this image
-# installs JDK 17 rather than 11. Delta 3.3.2 is the ceiling for Scala 2.12; Delta 4.x
-# targets Spark 4.0 / Scala 2.13. Hudi is held at 1.1.1 rather than 1.2.0 so that the
-# same version works on Flink: 1.2.0 relocates its codahale metrics but keeps the
+# installs JDK 17 rather than 11; Spark 4 requires 17 as a minimum in any case.
+# Delta 3.3.2 is the ceiling for Scala 2.12 and Delta 4.0.0 is the only Scala 2.13
+# build, which is what pins the Spark 4 profile to 4.0.x rather than 4.1.x.
+# On the 3.5 profile Hudi is held at 1.1.1 rather than 1.2.0 so the same version works
+# on Flink: 1.2.0 relocates its codahale metrics but keeps the
 # org.apache.flink.dropwizard.metrics.* class names, which collides with Iceberg's copy
 # on Flink's parent-first classpath and makes the two connectors mutually exclusive.
 ARG HUDI_VERSION=${HUDI_VERSION:-1.1.1}
@@ -29,19 +58,20 @@ ARG ICEBERG_VERSION=${ICEBERG_VERSION:-1.11.0}
 ARG DELTA_VERSION=${DELTA_VERSION:-3.3.2}
 ARG APACHE_URL="https://repo1.maven.org/maven2/org/apache"
 
-ENV SPARK_VERSION=${SPARK_VERSION:-3.5.5} \
-  SPARK_MAJOR_VERSION=${SPARK_MAJOR_VERSION:-3.5} \
+ENV SPARK_VERSION=${SPARK_VERSION} \
+  SPARK_MAJOR_VERSION=${SPARK_MAJOR_VERSION} \
+  SCALA_VERSION=${SCALA_VERSION} \
   SPARK_HOME=$SPARK_HOME \
   SPARK_CONF=$SPARK_HOME/conf \
   SPARK_CONF_DIR=/etc/spark/conf \
   SPARK_LOG_DIR=${SPARK_LOG_DIR:-/var/log/spark} \
   HUDI_HOME=${HUDI_HOME:-/opt/hudi} \
   HUDI_CONF_DIR=${HUDI_CONF_DIR:-/etc/hudi/conf} \
-  HUDI_VERSION=${HUDI_VERSION:-1.1.1} \
+  HUDI_VERSION=${HUDI_VERSION} \
   DELTA_HOME=${DELTA_HOME:-/opt/delta} \
-  DELTA_VERSION=${DELTA_VERSION:-3.3.2} \
+  DELTA_VERSION=${DELTA_VERSION} \
   ICEBERG_HOME=${ICEBERG_HOME:-/opt/iceberg} \
-  ICEBERG_VERSION=${ICEBERG_VERSION:-1.11.0} \
+  ICEBERG_VERSION=${ICEBERG_VERSION} \
   PATH="${SPARK_HOME}/sbin:${SPARK_HOME}/bin:${PATH}"
 
 COPY requirements.txt /tmp/requirements.txt

@@ -24,6 +24,39 @@ The script first downloads prerequisites into gitignored dirs (`software/`, `had
 (`SPARK_VERSION`, `HIVE_VERSION`, …). The `xtable` image is by far the slowest, since it git-clones
 and `mvn install`s XTable from source in a builder stage.
 
+`IMAGES` limits the run to a subset, which is the fast path after editing one Dockerfile:
+
+```sh
+IMAGES=spark SPARK_VERSION=4.0.2 ./docker_build/build_docker_images.sh
+IMAGES=spark,trino ./docker_build/build_docker_images.sh
+```
+
+### The Spark version matrix
+
+`SPARK_VERSION` selects a profile and everything else is derived from it, because the Spark line
+dictates the Scala binary, the bundled Hadoop, and which builds of the three formats exist:
+
+| `SPARK_VERSION` | Scala | Hadoop | Hudi | Iceberg | Delta |
+| --- | --- | --- | --- | --- | --- |
+| `3.5.5` (default) | 2.12 | 3.3.4 | 1.1.1 | 1.11.0 | 3.3.2 |
+| `4.0.2` | 2.13 | 3.4.1 | 1.2.0 | 1.11.0 | 4.0.0 |
+
+Any of the derived values can still be overridden individually, but the defaults are chosen so
+the three connectors agree. Two constraints are worth keeping in mind before changing them:
+
+- **Spark 4.1 is not a profile.** Delta publishes no Scala 2.13 build past 4.0.0, so a 4.1 image
+  would come without Delta, and the whole point of this stack is the three formats side by side.
+  Iceberg and Hudi both have 4.1 builds, so a Spark 4.1 profile is possible the moment Delta
+  ships one.
+- **S3A changes SDK between the profiles.** Hadoop 3.3.x uses AWS SDK v1
+  (`com.amazonaws:aws-java-sdk-bundle`), Hadoop 3.4.x uses SDK v2 (`software.amazon.awssdk:bundle`).
+  `download_hadoop_aws_jars` caches per Hadoop version under `.s3-jar-cache/<version>/` and then
+  stages a clean `hadoop-s3-jars/`, because `Dockerfile.spark` COPYs that directory wholesale and a
+  leftover v1 bundle would shadow the v2 classes in a Spark 4 image.
+
+When switching profiles, `docker_run/.env` has to move too — Compose resolves
+`ranga-spark:${SPARK_VERSION}`, so a pin that was never built tries to pull from Docker Hub.
+
 Run the stack (from anywhere; the script resolves its own dir):
 
 ```sh

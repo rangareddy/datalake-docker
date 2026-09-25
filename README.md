@@ -82,6 +82,43 @@ This takes a while on a cold cache. The `xtable` image compiles XTable from sour
 Maven and dominates the total. Every image is tagged twice, with its version and with
 `latest`, so `docker_run/.env` can pin exact versions.
 
+#### Choosing a Spark line
+
+The build supports two profiles, selected by `SPARK_VERSION`. Everything else follows from
+it, because the Spark line dictates the Scala binary, the bundled Hadoop, and which builds
+of Hudi, Iceberg and Delta exist:
+
+| `SPARK_VERSION` | Scala | Hadoop | Hudi  | Iceberg | Delta |
+| --------------- | ----- | ------ | ----- | ------- | ----- |
+| `3.5.5` (default) | 2.12 | 3.3.4 | 1.1.1 | 1.11.0 | 3.3.2 |
+| `4.0.2`           | 2.13 | 3.4.1 | 1.2.0 | 1.11.0 | 4.0.0 |
+
+```sh
+SPARK_VERSION=4.0.2 ./docker_build/build_docker_images.sh
+```
+
+Then pin the same version for the stack, so Compose resolves the tag that was built:
+
+```sh
+SPARK_VERSION=4.0.2 sh docker_run/run_datalake.sh restart
+```
+
+Spark 4.1 is deliberately not offered. Delta publishes no Scala 2.13 build past 4.0.0, so a
+4.1 image would come without Delta, and this stack exists to run all three formats side by
+side.
+
+Note the S3A dependency changes with the profile: Hadoop 3.3.x uses AWS SDK v1
+(`aws-java-sdk-bundle`) and Hadoop 3.4.x uses SDK v2 (`software.amazon.awssdk:bundle`). The
+build script downloads the right one and stages a clean `hadoop-s3-jars/` for the image, so
+switching profiles does not leave the previous SDK behind on the classpath.
+
+To build only some images, which is much faster than the full set:
+
+```sh
+IMAGES=spark SPARK_VERSION=4.0.2 ./docker_build/build_docker_images.sh
+IMAGES=spark,trino ./docker_build/build_docker_images.sh
+```
+
 To rebuild one image only, for example after editing a config file:
 
 ```sh
@@ -203,7 +240,7 @@ docker exec -it spark-master bash
 Start Spark SQL with the Hudi bundle:
 
 ```sh
-spark-sql --jars $(ls $HUDI_HOME/hudi-spark3.5-bundle_*.jar) \
+spark-sql --jars $(ls $HUDI_HOME/hudi-spark*-bundle_*.jar) \
   --conf spark.serializer=org.apache.spark.serializer.KryoSerializer \
   --conf spark.sql.catalog.spark_catalog=org.apache.spark.sql.hudi.catalog.HoodieCatalog \
   --conf spark.sql.extensions=org.apache.spark.sql.hudi.HoodieSparkSessionExtension \
@@ -320,14 +357,17 @@ the Trino catalog files and the compose files. Changing one means changing all o
 
 ## Versions
 
+The table below is the default (Spark 3.5) profile. See
+[Choosing a Spark line](#choosing-a-spark-line) for the Spark 4.0 set.
+
 | Component | Version         | Why this one |
 | --------- | --------------- | ------------ |
-| Spark     | 3.5.5 on JDK 17 | JDK 17 is required because Iceberg 1.11.0 is compiled for Java 17 |
+| Spark     | 3.5.5 on JDK 17 | Default profile. JDK 17 is required because Iceberg 1.11.0 is compiled for Java 17. `SPARK_VERSION=4.0.2` switches to the Scala 2.13 profile |
 | Flink     | 1.20.5 on Java 17 | Newest Flink all three formats support. There is no `flink-sql-connector-hive` build for Flink 2.x, and the metastore catalogs need it |
 | Trino     | 483             | Latest release. Trino 460 could not read Hudi 1.x tables at all |
 | Hudi      | 1.1.1           | Not 1.2.0, see the note below |
 | Iceberg   | 1.11.0          | Latest. Needs Java 17 and Flink 1.20 or newer |
-| Delta     | 3.3.2           | Ceiling for Scala 2.12. Delta 4.x targets Spark 4.0 and Scala 2.13, and Flink 2.0 |
+| Delta     | 3.3.2           | Ceiling for Scala 2.12. On the Spark 4.0 profile this becomes Delta 4.0.0, the only Scala 2.13 build |
 
 Hudi stays on one version across Spark, Flink, Hive and Kafka Connect, because all of them
 read and write the same tables through the shared metastore.
@@ -355,7 +395,7 @@ the commands below resolve them with `ls` rather than hardcoding versions.
 ### Hudi
 
 ```sh
-spark-sql --jars $(ls $HUDI_HOME/hudi-spark3.5-bundle_*.jar) \
+spark-sql --jars $(ls $HUDI_HOME/hudi-spark*-bundle_*.jar) \
   --conf spark.serializer=org.apache.spark.serializer.KryoSerializer \
   --conf spark.sql.catalog.spark_catalog=org.apache.spark.sql.hudi.catalog.HoodieCatalog \
   --conf spark.sql.extensions=org.apache.spark.sql.hudi.HoodieSparkSessionExtension \
@@ -586,7 +626,7 @@ Hive sync mode and the metastore URI come from `hudi-defaults.conf`, baked into 
 The slim utilities bundle needs the Spark bundle on `--jars`:
 
 ```sh
-export SPARK_BUNDLE=$(ls $HUDI_HOME/hudi-spark3.5-bundle_*.jar)
+export SPARK_BUNDLE=$(ls $HUDI_HOME/hudi-spark*-bundle_*.jar)
 export SLIM_BUNDLE=$(ls $HUDI_HOME/hudi-utilities-slim-bundle_*.jar)
 
 spark-submit --jars $SPARK_BUNDLE \
@@ -619,7 +659,7 @@ continuously instead of exiting after one batch.
 From Spark:
 
 ```sh
-spark-shell --jars $(ls $HUDI_HOME/hudi-spark3.5-bundle_*.jar) \
+spark-shell --jars $(ls $HUDI_HOME/hudi-spark*-bundle_*.jar) \
   --conf spark.serializer=org.apache.spark.serializer.KryoSerializer
 ```
 
@@ -710,7 +750,7 @@ other, or edit the `slot.name` in one of the JSON files.
 ```sh
 docker exec -it spark-master bash
 
-export SPARK_BUNDLE=$(ls $HUDI_HOME/hudi-spark3.5-bundle_*.jar)
+export SPARK_BUNDLE=$(ls $HUDI_HOME/hudi-spark*-bundle_*.jar)
 export SLIM_BUNDLE=$(ls $HUDI_HOME/hudi-utilities-slim-bundle_*.jar)
 
 spark-submit --jars $SPARK_BUNDLE \
