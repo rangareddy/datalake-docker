@@ -36,19 +36,20 @@ RUN set -eux; \
   apt-get clean; \
   rm -rf /var/lib/apt/lists/*
 
-ARG SPARK_VERSION=${SPARK_VERSION:-3.5.5}
+ARG SPARK_VERSION=${SPARK_VERSION:-3.5.9}
 ARG SPARK_MAJOR_VERSION=${SPARK_MAJOR_VERSION:-3.5}
 ARG SCALA_VERSION=${SCALA_VERSION:-2.12}
 ARG SPARK_HOME=${SPARK_HOME:-/opt/spark}
 # Two supported profiles, chosen by build_docker_images.sh from SPARK_VERSION:
 #
 #   Spark 3.5.x / Scala 2.12 -> Hudi 1.1.1, Iceberg 1.11.0, Delta 3.3.2
-#   Spark 4.0.x / Scala 2.13 -> Hudi 1.2.0, Iceberg 1.11.0, Delta 4.0.0
+#   Spark 4.1.x / Scala 2.13 -> Hudi 1.2.0, Iceberg 1.11.0, Delta 4.0.0
 #
 # Iceberg 1.11.0 is compiled for Java 17 (class file 61.0), which is why this image
 # installs JDK 17 rather than 11; Spark 4 requires 17 as a minimum in any case.
-# Delta 3.3.2 is the ceiling for Scala 2.12 and Delta 4.0.0 is the only Scala 2.13
-# build, which is what pins the Spark 4 profile to 4.0.x rather than 4.1.x.
+# Delta 3.3.2 is the ceiling for Scala 2.12, and 4.0.0 is the newest Scala 2.13 build
+# there is, so the Spark 4.1 profile ships Delta 4.0.0 - see the README for what that
+# supports in practice.
 # On the 3.5 profile Hudi is held at 1.1.1 rather than 1.2.0 so the same version works
 # on Flink: 1.2.0 relocates its codahale metrics but keeps the
 # org.apache.flink.dropwizard.metrics.* class names, which collides with Iceberg's copy
@@ -111,16 +112,28 @@ ARG DELTA_JAR=delta-spark_${SCALA_VERSION}-${DELTA_VERSION}.jar
 ARG DELTA_STORAGE_JAR=delta-storage-${DELTA_VERSION}.jar
 ARG HUDI_JAR=hudi-spark${SPARK_MAJOR_VERSION}-bundle_${SCALA_VERSION}-${HUDI_VERSION}.jar
 
-RUN mkdir -p $HUDI_HOME $DELTA_HOME $ICEBERG_HOME && \
-  wget -P $ICEBERG_HOME $APACHE_URL/iceberg/iceberg-spark-runtime-${SPARK_MAJOR_VERSION}_${SCALA_VERSION}/$ICEBERG_VERSION/$ICEBERG_JAR && \
-  wget -P $DELTA_HOME/ https://repo1.maven.org/maven2/io/delta/delta-spark_${SCALA_VERSION}/${DELTA_VERSION}/$DELTA_JAR && \
-  wget -P $DELTA_HOME/ https://repo1.maven.org/maven2/io/delta/delta-storage/${DELTA_VERSION}/$DELTA_STORAGE_JAR && \
-  wget -P $HUDI_HOME/ ${APACHE_URL}/hudi/hudi-hive-sync/${HUDI_VERSION}/hudi-hive-sync-${HUDI_VERSION}.jar  && \
-  wget -P $HUDI_HOME/ ${APACHE_URL}/hudi/hudi-hive-sync-bundle/${HUDI_VERSION}/hudi-hive-sync-bundle-${HUDI_VERSION}.jar && \
-  wget -P $HUDI_HOME/ ${APACHE_URL}/hudi/hudi-hadoop-mr/${HUDI_VERSION}/hudi-hadoop-mr-${HUDI_VERSION}.jar  && \
-  wget -P $HUDI_HOME/ ${APACHE_URL}/hudi/hudi-spark${SPARK_MAJOR_VERSION}-bundle_${SCALA_VERSION}/${HUDI_VERSION}/$HUDI_JAR && \
-  wget -P $HUDI_HOME/ ${APACHE_URL}/hudi/hudi-utilities-bundle_${SCALA_VERSION}/${HUDI_VERSION}/hudi-utilities-bundle_${SCALA_VERSION}-${HUDI_VERSION}.jar && \
-  wget -P $HUDI_HOME/ ${APACHE_URL}/hudi/hudi-utilities-slim-bundle_${SCALA_VERSION}/${HUDI_VERSION}/hudi-utilities-slim-bundle_${SCALA_VERSION}-${HUDI_VERSION}.jar
+# Hudi and Delta are skipped when their version is empty, which is how the Spark 4.1
+# profile is expressed: neither has a build that runs on Spark 4.1 yet, so the image
+# ships Iceberg alone rather than jars that fail at the first statement.
+RUN set -eux; \
+  mkdir -p $HUDI_HOME $DELTA_HOME $ICEBERG_HOME; \
+  wget -P $ICEBERG_HOME $APACHE_URL/iceberg/iceberg-spark-runtime-${SPARK_MAJOR_VERSION}_${SCALA_VERSION}/$ICEBERG_VERSION/$ICEBERG_JAR; \
+  if [ -n "${DELTA_VERSION}" ]; then \
+    wget -P $DELTA_HOME/ https://repo1.maven.org/maven2/io/delta/delta-spark_${SCALA_VERSION}/${DELTA_VERSION}/$DELTA_JAR; \
+    wget -P $DELTA_HOME/ https://repo1.maven.org/maven2/io/delta/delta-storage/${DELTA_VERSION}/$DELTA_STORAGE_JAR; \
+  else \
+    echo "DELTA_VERSION empty - skipping Delta for this Spark line"; \
+  fi; \
+  if [ -n "${HUDI_VERSION}" ]; then \
+    wget -P $HUDI_HOME/ ${APACHE_URL}/hudi/hudi-hive-sync/${HUDI_VERSION}/hudi-hive-sync-${HUDI_VERSION}.jar; \
+    wget -P $HUDI_HOME/ ${APACHE_URL}/hudi/hudi-hive-sync-bundle/${HUDI_VERSION}/hudi-hive-sync-bundle-${HUDI_VERSION}.jar; \
+    wget -P $HUDI_HOME/ ${APACHE_URL}/hudi/hudi-hadoop-mr/${HUDI_VERSION}/hudi-hadoop-mr-${HUDI_VERSION}.jar; \
+    wget -P $HUDI_HOME/ ${APACHE_URL}/hudi/hudi-spark${SPARK_MAJOR_VERSION}-bundle_${SCALA_VERSION}/${HUDI_VERSION}/$HUDI_JAR; \
+    wget -P $HUDI_HOME/ ${APACHE_URL}/hudi/hudi-utilities-bundle_${SCALA_VERSION}/${HUDI_VERSION}/hudi-utilities-bundle_${SCALA_VERSION}-${HUDI_VERSION}.jar; \
+    wget -P $HUDI_HOME/ ${APACHE_URL}/hudi/hudi-utilities-slim-bundle_${SCALA_VERSION}/${HUDI_VERSION}/hudi-utilities-slim-bundle_${SCALA_VERSION}-${HUDI_VERSION}.jar; \
+  else \
+    echo "HUDI_VERSION empty - skipping Hudi for this Spark line"; \
+  fi
 
 COPY scripts/spark/entrypoint.sh /opt/entrypoint.sh
 COPY check_service_status_utility.sh /opt/check_service_status_utility.sh

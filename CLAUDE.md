@@ -27,7 +27,7 @@ and `mvn install`s XTable from source in a builder stage.
 `IMAGES` limits the run to a subset, which is the fast path after editing one Dockerfile:
 
 ```sh
-IMAGES=spark SPARK_VERSION=4.0.2 ./docker_build/build_docker_images.sh
+IMAGES=spark SPARK_VERSION=4.1.3 ./docker_build/build_docker_images.sh
 IMAGES=spark,trino ./docker_build/build_docker_images.sh
 ```
 
@@ -38,16 +38,22 @@ dictates the Scala binary, the bundled Hadoop, and which builds of the three for
 
 | `SPARK_VERSION` | Scala | Hadoop | Hudi | Iceberg | Delta |
 | --- | --- | --- | --- | --- | --- |
-| `3.5.5` (default) | 2.12 | 3.3.4 | 1.1.1 | 1.11.0 | 3.3.2 |
-| `4.0.2` | 2.13 | 3.4.1 | 1.2.0 | 1.11.0 | 4.0.0 |
+| `3.5.9` (default) | 2.12 | 3.3.4 | 1.1.1 | 1.11.0 | 3.3.2 |
+| `4.1.3` | 2.13 | 3.4.2 | — | 1.11.0 | — |
+
+Those are the only two lines; anything else exits with an error rather than being built
+against a guessed Scala binary.
 
 Any of the derived values can still be overridden individually, but the defaults are chosen so
 the three connectors agree. Two constraints are worth keeping in mind before changing them:
 
-- **Spark 4.1 is not a profile.** Delta publishes no Scala 2.13 build past 4.0.0, so a 4.1 image
-  would come without Delta, and the whole point of this stack is the three formats side by side.
-  Iceberg and Hudi both have 4.1 builds, so a Spark 4.1 profile is possible the moment Delta
-  ships one.
+- **The Spark 4.1 image is Iceberg-only, and this was measured.** `hudi-spark4.1-bundle` 1.2.0
+  dies with `NoClassDefFoundError org/apache/parquet/variant/VariantConverters` because Spark
+  4.1.3 ships Parquet 1.16.0 without that class while the bundle is built against 1.15.x;
+  Delta 4.0.0 dies with `NoSuchMethodError org.apache.spark.internal.LogKey.$init$` and has no
+  Scala 2.13 build past 4.0.0. `Dockerfile.spark` skips a format whose version arg is empty,
+  which is how the profile is expressed, and the smoke test reports those as skipped rather
+  than failed. Use 3.5.9 when all three formats are needed.
 - **S3A changes SDK between the profiles.** Hadoop 3.3.x uses AWS SDK v1
   (`com.amazonaws:aws-java-sdk-bundle`), Hadoop 3.4.x uses SDK v2 (`software.amazon.awssdk:bundle`).
   `download_hadoop_aws_jars` caches per Hadoop version under `.s3-jar-cache/<version>/` and then
@@ -79,8 +85,9 @@ Publish (pushes *every* local image whose repository contains `ranga-`, both tag
 Build one image manually:
 
 ```sh
-cd docker_build && docker build --build-arg SPARK_VERSION=3.5.5 --platform linux/arm64 \
-  -f Dockerfile.spark . -t rangareddy1988/ranga-spark:3.5.5
+cd docker_build && docker build --build-arg SPARK_VERSION=3.5.9 \
+  --platform "$(source ./validate_docker_status.sh >/dev/null 2>&1; get_docker_platform)" \
+  -f Dockerfile.spark . -t rangareddy1988/ranga-spark:3.5.9
 ```
 
 ## Architecture
@@ -228,6 +235,10 @@ out); it exists to build Hudi from source and stage the bundle jars for the Flin
 - Everything is Bash + Docker; scripts use `set -e`/`set -euo pipefail` and resolve their own
   directory via `CURRENT_DIR="$(cd "$(dirname "$0")"; pwd -P)"`.
 - All versions are `${VAR:-default}` env-var overridable, both in scripts and in Dockerfile `ARG`s.
+- Platform is never hardcoded. `get_docker_architecture` / `get_docker_platform` in
+  `docker_build/validate_docker_status.sh` ask the Docker daemon (falling back to `uname -m`),
+  and both `build_docker_images.sh` and `run_datalake.sh` use the result. Setting `PLATFORM`
+  in the environment overrides it, which is the only way to cross-build on purpose.
 - Services attach to the single external-facing `datalake` bridge network; use container names
   (`minio`, `kafka`, `hive-metastore`) for in-network addressing and `localhost:<host-port>` from
   the host.

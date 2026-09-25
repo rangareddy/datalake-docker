@@ -8,31 +8,49 @@ CURRENT_DIR="$(
 )"
 DOCKER_HUB_USERNAME="rangareddy1988"
 HIVE_VERSION=${HIVE_VERSION:-4.0.0}
-SPARK_VERSION=${SPARK_VERSION:-3.5.5}
+SPARK_VERSION=${SPARK_VERSION:-3.5.9}
 
 # Everything below follows from SPARK_VERSION, because the Spark line dictates the
 # Scala binary, the bundled Hadoop, and which builds of Hudi/Iceberg/Delta exist.
 #
 #   Spark 3.5.x -> Scala 2.12, Hadoop 3.3.4, Hudi 1.1.1, Iceberg 1.11.0, Delta 3.3.2
-#   Spark 4.0.x -> Scala 2.13, Hadoop 3.4.1, Hudi 1.2.0, Iceberg 1.11.0, Delta 4.0.0
+#   Spark 4.1.x -> Scala 2.13, Hadoop 3.4.2, Iceberg 1.11.0 only
 #
-# Spark 4.1 is deliberately not a profile: Delta publishes no Scala 2.13 build past
-# 4.0.0, so a 4.1 image would lose Delta and this stack needs all three formats.
+# The 4.1 line is Iceberg-only, and both exclusions were verified by running them rather
+# than inferred from a version table:
+#
+#   Hudi 1.2.0   NoClassDefFoundError org/apache/parquet/variant/VariantConverters
+#                Spark 4.1.3 ships Parquet 1.16.0, which dropped that class; the
+#                hudi-spark4.1 bundle is built against 1.15.x and bundles parquet
+#                classes that still reference it.
+#   Delta 4.0.0  NoSuchMethodError org.apache.spark.internal.LogKey.$init$
+#                Spark 4.1 changed an internal trait Delta 4.0.0 was compiled against,
+#                and Delta publishes no Scala 2.13 build past 4.0.0.
+#
+# Both exclusions are a matter of upstream releases, not of this repo: when Hudi and
+# Delta publish builds for Spark 4.1, filling in the two versions below is the whole
+# change. An unrecognised Spark line is refused rather than silently built against the
+# wrong Scala binary.
 SPARK_MAJOR_VERSION=${SPARK_MAJOR_VERSION:-$(echo "$SPARK_VERSION" | cut -d. -f1,2)}
 case "$SPARK_MAJOR_VERSION" in
-4.*)
-  SCALA_VERSION=${SCALA_VERSION:-2.13}
-  HADOOP_VERSION=${HADOOP_VERSION:-3.4.1}
-  HUDI_VERSION=${HUDI_VERSION:-1.2.0}
-  DELTA_VERSION=${DELTA_VERSION:-4.0.0}
-  ICEBERG_VERSION=${ICEBERG_VERSION:-1.11.0}
-  ;;
-*)
+3.5)
   SCALA_VERSION=${SCALA_VERSION:-2.12}
   HADOOP_VERSION=${HADOOP_VERSION:-3.3.4}
   HUDI_VERSION=${HUDI_VERSION:-1.1.1}
   DELTA_VERSION=${DELTA_VERSION:-3.3.2}
   ICEBERG_VERSION=${ICEBERG_VERSION:-1.11.0}
+  ;;
+4.1)
+  SCALA_VERSION=${SCALA_VERSION:-2.13}
+  HADOOP_VERSION=${HADOOP_VERSION:-3.4.2}
+  ICEBERG_VERSION=${ICEBERG_VERSION:-1.11.0}
+  HUDI_VERSION=${HUDI_VERSION:-}
+  DELTA_VERSION=${DELTA_VERSION:-}
+  ;;
+*)
+  echo "Unsupported SPARK_VERSION '$SPARK_VERSION' (major '$SPARK_MAJOR_VERSION')." >&2
+  echo "Supported lines: 3.5.x (e.g. 3.5.9) and 4.1.x (e.g. 4.1.3)." >&2
+  exit 1
   ;;
 esac
 KAFKA_CONNECT_VERSION=${KAFKA_CONNECT_VERSION:-7.4.7}
@@ -48,7 +66,7 @@ FLINK_VERSION=${FLINK_VERSION:-1.20.5}
 # switched to SDK v2 (software.amazon.awssdk:bundle). Shipping the wrong one gives a
 # ClassNotFoundException on the first s3a:// call, so the profile picks.
 AWS_JAVA_SDK_VERSION=${AWS_JAVA_SDK_VERSION:-1.12.262}
-AWS_SDK_V2_VERSION=${AWS_SDK_V2_VERSION:-2.24.6}
+AWS_SDK_V2_VERSION=${AWS_SDK_V2_VERSION:-2.29.52}
 MVN_REPO_URL="https://repo1.maven.org/maven2"
 
 
@@ -56,7 +74,7 @@ MVN_REPO_URL="https://repo1.maven.org/maven2"
 # takes a long time (xtable clones and mvn-installs from source), so a targeted
 # rebuild after touching one Dockerfile is:
 #
-#   IMAGES=spark SPARK_VERSION=4.0.2 ./docker_build/build_docker_images.sh
+#   IMAGES=spark SPARK_VERSION=4.1.3 ./docker_build/build_docker_images.sh
 IMAGES=${IMAGES:-}
 should_build() {
   [ -z "$IMAGES" ] && return 0

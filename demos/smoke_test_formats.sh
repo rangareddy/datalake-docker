@@ -11,10 +11,20 @@ set -uo pipefail
 SUFFIX="${SUFFIX:-smoke}"
 PASS=0
 FAIL=0
+SKIP=0
 
 hudi_bundle() { ls "$HUDI_HOME"/hudi-spark*-bundle_*.jar 2>/dev/null | head -1; }
 iceberg_jars() { ls "$ICEBERG_HOME"/*.jar 2>/dev/null | tr '\n' ',' | sed 's/,$//'; }
 delta_jars() { ls "$DELTA_HOME"/*.jar 2>/dev/null | tr '\n' ',' | sed 's/,$//'; }
+
+# A format with no jars in the image is not shipped for this Spark line - the 4.1
+# profile is Iceberg-only - so that is a skip, not a failure.
+have() { ls $1 >/dev/null 2>&1; }
+
+skip() {
+  echo "  SKIP  $1: not shipped on this Spark line"
+  SKIP=$((SKIP + 1))
+}
 
 report() {
   local name="$1" expected="$2" actual="$3"
@@ -68,6 +78,9 @@ report "iceberg snapshot history" "SNAPS=3" "$ICE_SNAP"
 
 # ---------------------------------------------------------------- Hudi
 echo "== hudi =="
+if ! have "$HUDI_HOME/hudi-spark*-bundle_*.jar"; then
+  skip "hudi write/update"
+else
 HUDI_OUT=$(spark-sql --master "${SPARK_MASTER:-local[2]}" \
   --jars "$(hudi_bundle)" \
   --conf spark.serializer=org.apache.spark.serializer.KryoSerializer \
@@ -84,9 +97,13 @@ HUDI_OUT=$(spark-sql --master "${SPARK_MASTER:-local[2]}" \
     SELECT concat('ROWS=', count(*), ' DEPT=', max(dept)) FROM emp_hudi_${SUFFIX};
   " 2>/dev/null | grep -oE 'ROWS=[0-9]+ DEPT=[A-Za-z]+' | tail -1)
 report "hudi write/update" "ROWS=2 DEPT=Software" "$HUDI_OUT"
+fi
 
 # ---------------------------------------------------------------- Delta
 echo "== delta =="
+if ! have "$DELTA_HOME/*.jar"; then
+  skip "delta write/update/delete"
+else
 DELTA_OUT=$(spark-sql --master "${SPARK_MASTER:-local[2]}" \
   --jars "$(delta_jars)" \
   --conf spark.sql.extensions=io.delta.sql.DeltaSparkSessionExtension \
@@ -101,8 +118,9 @@ DELTA_OUT=$(spark-sql --master "${SPARK_MASTER:-local[2]}" \
     SELECT concat('ROWS=', count(*), ' DEPT=', max(dept)) FROM emp_delta_${SUFFIX};
   " 2>/dev/null | grep -oE 'ROWS=[0-9]+ DEPT=[A-Za-z]+' | tail -1)
 report "delta write/update/delete" "ROWS=1 DEPT=Analytics" "$DELTA_OUT"
+fi
 
 echo
 echo "== summary =="
-echo "  passed $PASS, failed $FAIL"
+echo "  passed $PASS, failed $FAIL, skipped $SKIP"
 [ "$FAIL" -eq 0 ] || exit 1

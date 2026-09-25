@@ -12,6 +12,12 @@ source "$REPO_DIR/docker_build/validate_docker_status.sh"
 
 COMPOSE_CMD="$(get_docker_compose_cmd)"
 
+# The compose files read ${PLATFORM} for every service. Export the detected value so
+# the stack runs natively on whatever this machine is, without anyone editing .env.
+# An explicit PLATFORM in the environment or in .env still wins.
+PLATFORM="$(get_docker_platform)"
+export PLATFORM
+
 # PROFILE=core (default) starts docker-compose.yml.
 # PROFILE=all starts docker-compose_all.yml, which adds MySQL, Trino, Jupyter, XTable and Flink.
 PROFILE="${PROFILE:-core}"

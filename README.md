@@ -36,8 +36,9 @@ Everything is Docker images plus a Compose stack. There is no application code t
 | Network     | The first build downloads the Spark and Hadoop tarballs plus about 40 jars from Maven Central |
 | Free ports  | 2181, 3306, 5432, 6121-6123, 7077, 8080-8084, 8888, 8978, 9000-9001, 9082-9084, 9092, 9101, 10000, 10002, 14040-14042, 18080-18081, 29092 |
 
-The stack runs `linux/amd64` images. On Apple Silicon they run under emulation, which works
-but is slower. Set `PLATFORM=linux/arm64` in `docker_run/.env` if you rebuild natively.
+The platform is detected from the Docker daemon, so images build and run natively on both
+Apple Silicon and Intel with nothing to configure. Set `PLATFORM=linux/amd64` in the
+environment only if you deliberately want a cross-platform build.
 
 ## Setup, step by step
 
@@ -75,7 +76,7 @@ What it does, in order:
 Each image prints a line on success:
 
 ```
-Successfully built spark:3.5.5
+Successfully built spark:3.5.9
 ```
 
 This takes a while on a cold cache. The `xtable` image compiles XTable from source with
@@ -90,22 +91,38 @@ of Hudi, Iceberg and Delta exist:
 
 | `SPARK_VERSION` | Scala | Hadoop | Hudi  | Iceberg | Delta |
 | --------------- | ----- | ------ | ----- | ------- | ----- |
-| `3.5.5` (default) | 2.12 | 3.3.4 | 1.1.1 | 1.11.0 | 3.3.2 |
-| `4.0.2`           | 2.13 | 3.4.1 | 1.2.0 | 1.11.0 | 4.0.0 |
+| `3.5.9` (default) | 2.12 | 3.3.4 | 1.1.1 | 1.11.0 | 3.3.2 |
+| `4.1.3`           | 2.13 | 3.4.2 | —     | 1.11.0 | —     |
+
+Any other Spark line is refused rather than built against a guessed Scala binary.
+
+**The Spark 4.1 image ships Iceberg only.** Neither Hudi nor Delta has a build that runs
+on Spark 4.1 yet, and both failures were confirmed by running them rather than inferred
+from a version table:
+
+- **Hudi 1.2.0** — `NoClassDefFoundError: org/apache/parquet/variant/VariantConverters`.
+  Spark 4.1.3 ships Parquet 1.16.0, which dropped that class; `hudi-spark4.1-bundle` is
+  built against 1.15.x and bundles parquet classes that still reference it.
+- **Delta 4.0.0** — `NoSuchMethodError: org.apache.spark.internal.LogKey.$init$`. Spark
+  4.1 changed an internal trait Delta 4.0.0 was compiled against, and Delta publishes no
+  Scala 2.13 build past 4.0.0.
+
+Rather than shipping jars that fail on the first statement, the image leaves them out and
+`demos/smoke_test_formats.sh` reports them as skipped. Use the **3.5.9** profile when you
+need all three formats. When Hudi and Delta publish Spark 4.1 builds, filling in the two
+versions in `build_docker_images.sh` is the whole change.
 
 ```sh
-SPARK_VERSION=4.0.2 ./docker_build/build_docker_images.sh
+SPARK_VERSION=4.1.3 ./docker_build/build_docker_images.sh
 ```
 
 Then pin the same version for the stack, so Compose resolves the tag that was built:
 
 ```sh
-SPARK_VERSION=4.0.2 sh docker_run/run_datalake.sh restart
+SPARK_VERSION=4.1.3 sh docker_run/run_datalake.sh restart
 ```
 
-Spark 4.1 is deliberately not offered. Delta publishes no Scala 2.13 build past 4.0.0, so a
-4.1 image would come without Delta, and this stack exists to run all three formats side by
-side.
+
 
 Note the S3A dependency changes with the profile: Hadoop 3.3.x uses AWS SDK v1
 (`aws-java-sdk-bundle`) and Hadoop 3.4.x uses SDK v2 (`software.amazon.awssdk:bundle`). The
@@ -115,7 +132,7 @@ switching profiles does not leave the previous SDK behind on the classpath.
 To build only some images, which is much faster than the full set:
 
 ```sh
-IMAGES=spark SPARK_VERSION=4.0.2 ./docker_build/build_docker_images.sh
+IMAGES=spark SPARK_VERSION=4.1.3 ./docker_build/build_docker_images.sh
 IMAGES=spark,trino ./docker_build/build_docker_images.sh
 ```
 
@@ -123,9 +140,10 @@ To rebuild one image only, for example after editing a config file:
 
 ```sh
 cd docker_build
-docker build --build-arg SPARK_VERSION=3.5.5 --platform linux/amd64 \
+docker build --build-arg SPARK_VERSION=3.5.9 \
+  --platform "$(source ./validate_docker_status.sh >/dev/null 2>&1; get_docker_platform)" \
   -f "$PWD/Dockerfile.spark" "$PWD" \
-  -t rangareddy1988/ranga-spark:3.5.5 -t rangareddy1988/ranga-spark:latest
+  -t rangareddy1988/ranga-spark:3.5.9 -t rangareddy1988/ranga-spark:latest
 ```
 
 ### Step 3: Start the stack
@@ -223,7 +241,7 @@ docker exec spark-master bash -lc 'spark-submit --version 2>&1 | grep "version 3
 ```
 {"taskmanagers":1,"slots-total":4,"flink-version":"1.20.5"}
 {"version":"483","starting":false}
-   /___/ .__/\_,_/_/ /_/\_\   version 3.5.5
+   /___/ .__/\_,_/_/ /_/\_\   version 3.5.9
 ```
 
 ### Step 5: Create your first table
@@ -362,10 +380,10 @@ The table below is the default (Spark 3.5) profile. See
 
 | Component | Version         | Why this one |
 | --------- | --------------- | ------------ |
-| Spark     | 3.5.5 on JDK 17 | Default profile. JDK 17 is required because Iceberg 1.11.0 is compiled for Java 17. `SPARK_VERSION=4.0.2` switches to the Scala 2.13 profile |
+| Spark     | 3.5.9 on JDK 17 | Default profile. JDK 17 is required because Iceberg 1.11.0 is compiled for Java 17. `SPARK_VERSION=4.1.3` switches to the Scala 2.13 profile |
 | Flink     | 1.20.5 on Java 17 | Newest Flink all three formats support. There is no `flink-sql-connector-hive` build for Flink 2.x, and the metastore catalogs need it |
 | Trino     | 483             | Latest release. Trino 460 could not read Hudi 1.x tables at all |
-| Hudi      | 1.1.1           | Not 1.2.0, see the note below |
+| Hudi      | 1.1.1           | Spark 3.5 profile only; no Spark 4.1 build runs yet. Not 1.2.0, see the note below |
 | Iceberg   | 1.11.0          | Latest. Needs Java 17 and Flink 1.20 or newer |
 | Delta     | 3.3.2           | Ceiling for Scala 2.12. On the Spark 4.0 profile this becomes Delta 4.0.0, the only Scala 2.13 build |
 
