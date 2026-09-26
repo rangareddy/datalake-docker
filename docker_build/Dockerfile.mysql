@@ -1,0 +1,12 @@
+# MySQL for the "all" profile: the second CDC source alongside Postgres.
+#
+# Wrapped so the stack pulls a tag this repo controls; see Dockerfile.zookeeper.
+ARG MYSQL_VERSION=8.0-20.04_edge
+FROM ubuntu/mysql:${MYSQL_VERSION}
+
+ARG MYSQL_VERSION
+LABEL maintainer="Ranga Reddy <rangareddy.avula@gmail.com>" \
+	description="Datalake MySQL image" \
+	upstream="ubuntu/mysql:${MYSQL_VERSION}"
+
+# Pure re-tag; seed SQL stays a bind mount from docker_run/db_scripts.

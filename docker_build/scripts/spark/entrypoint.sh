@@ -52,16 +52,26 @@ start_spark_history_server() {
 }
 
 # Function to start Notebook
+#
+# This image carries JupyterLab and the Python, Scala (spylon) and Java (IJava) kernels
+# already, so the notebook service runs from here rather than from a separate 3.2GB
+# jupyter image - and gets a real Spark to talk to instead of a bare Python kernel.
 start_jupyter() {
   export PYSPARK_DRIVER_PYTHON=jupyter
   export PYSPARK_DRIVER_PYTHON_OPTS="notebook"
-  echo "Starting the Jupyter Lab..."
-  nohup jupyter-lab --ip=0.0.0.0 --port=8888 --no-browser --allow-root --NotebookApp.token='' 2>&1 &
-  sleep 3
+  export JUPYTER_PORT=${JUPYTER_PORT:-8888}
+  export NOTEBOOK_DIR=${NOTEBOOK_DIR:-/opt/notebooks}
+  mkdir -p "$NOTEBOOK_DIR"
+  echo "Starting the Jupyter Lab in $NOTEBOOK_DIR..."
+  nohup jupyter-lab --ip=0.0.0.0 --port="$JUPYTER_PORT" --no-browser --allow-root \
+    --notebook-dir="$NOTEBOOK_DIR" --NotebookApp.token='' \
+    >>"${SPARK_LOG_DIR}/jupyter.log" 2>&1 &
+  sleep 5
   if [ -n "$(pgrep -f 'jupyter-lab')" ]; then
     echo "Jupyter Lab started successfully."
   else
-    echo "ERROR: Jupyter Lab failed to start."
+    echo "ERROR: Jupyter Lab failed to start. Last lines of ${SPARK_LOG_DIR}/jupyter.log:"
+    tail -20 "${SPARK_LOG_DIR}/jupyter.log" 2>/dev/null
     exit 1
   fi
 }
@@ -75,6 +85,12 @@ elif [ "$SPARK_MODE" == "history" ]; then
   start_spark_history_server
 elif [ "$SPARK_MODE" == "connect" ]; then
   start_spark_connect
+elif [ "$SPARK_MODE" == "notebook" ]; then
+  start_jupyter
+else
+  echo "ERROR: unknown SPARK_MODE '$SPARK_MODE'." >&2
+  echo "Expected one of: master | worker | history | connect | notebook" >&2
+  exit 1
 fi
 
 while true; do sleep 1000; done

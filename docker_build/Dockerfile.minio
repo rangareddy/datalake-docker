@@ -1,0 +1,28 @@
+# MinIO - the S3-compatible object store every engine in the stack writes to.
+#
+# Wrapping this is not hypothetical: docker.io/minio/minio stopped resolving
+# ("pull access denied"), which broke the stack until the compose files were
+# repointed at quay.io. Owning the tag turns that class of breakage into a rebuild.
+#
+# The pin is a digest, not a tag, and that is deliberate. quay.io/minio/minio serves
+# only :latest anonymously - every RELEASE.* tag answers 401 unauthorized - so a tag
+# pin is not available and :latest is a moving target. A digest is immutable, is
+# still pullable without credentials, and covers both architectures because it is
+# the manifest-list digest. Refresh it with:
+#
+#   docker pull quay.io/minio/minio:latest
+#   docker inspect quay.io/minio/minio:latest --format '{{index .RepoDigests 0}}'
+#
+# Digest below = RELEASE.2025-09-07T16-13-09Z.
+ARG MINIO_BASE_DIGEST=sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e
+FROM quay.io/minio/minio@${MINIO_BASE_DIGEST}
+
+ARG MINIO_VERSION=RELEASE.2025-09-07T16-13-09Z
+LABEL maintainer="Ranga Reddy <rangareddy.avula@gmail.com>" \
+	description="Datalake MinIO image" \
+	upstream="quay.io/minio/minio:${MINIO_VERSION}"
+
+# Nothing added. The base has bash and curl, so the healthcheck can use MinIO's own
+# /minio/health/live endpoint instead of a bare TCP probe that says only "port open".
+HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=5 \
+	CMD curl -fsS http://localhost:9000/minio/health/live || exit 1

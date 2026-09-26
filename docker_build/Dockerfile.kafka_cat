@@ -1,21 +1,27 @@
-ARG CONFLUENT_KAFKACAT_VERSION=${CONFLUENT_KAFKACAT_VERSION:-7.1.15}
-FROM confluentinc/cp-kafkacat:$CONFLUENT_KAFKACAT_VERSION
+# kcat (kafkacat) in a long-lived container, so topics can be inspected from inside
+# the datalake network without installing anything on the host:
+#
+#   docker exec kafka-cat kafkacat -b kafka:29092 -L
+ARG CONFLUENT_KAFKACAT_VERSION=7.1.15
+FROM confluentinc/cp-kafkacat:${CONFLUENT_KAFKACAT_VERSION}
 
-SHELL ["/bin/bash", "-c"]
-
-LABEL maintainer="Ranga Reddy <rangareddy.avula@gmail.com>"
-LABEL description="Datalake Kafka Cat image"
+ARG CONFLUENT_KAFKACAT_VERSION
+LABEL maintainer="Ranga Reddy <rangareddy.avula@gmail.com>" \
+	description="Datalake kcat image" \
+	upstream="confluentinc/cp-kafkacat:${CONFLUENT_KAFKACAT_VERSION}"
 
 USER root
 
-RUN set -ex; \
-	yum update -y && yum install -y curl wget vim git jq;
-
-RUN mkdir -p /opt/data && \
-	git clone https://github.com/rangareddy/hudi-kafka-connect-demo.git /opt/data/hudi-kafka-connect-demo && \
-	chown appuser:root -R /opt/data
+# No `yum update -y` here either; see Dockerfile.kafka_connect. --depth 1 and dropping
+# .git keep the demo checkout to its working tree rather than its whole history.
+RUN yum install -y curl wget vim git jq \
+	&& yum clean all && rm -rf /var/cache/yum \
+	&& mkdir -p /opt/data \
+	&& git clone --depth 1 https://github.com/rangareddy/hudi-kafka-connect-demo.git /opt/data/hudi-kafka-connect-demo \
+	&& rm -rf /opt/data/hudi-kafka-connect-demo/.git \
+	&& chown appuser:root -R /opt/data
 
 USER appuser
 
+# Nothing to serve; the container exists to be exec'd into.
 CMD ["sleep", "infinity"]
-

@@ -37,6 +37,26 @@ report() {
   fi
 }
 
+# Hudi and Delta both create their table at an explicit LOCATION, and DROP TABLE on
+# such a table removes the metastore entry only - the files under that prefix stay. A
+# second run then re-attaches to the first run's data, and because Hudi's INSERT INTO
+# appends rather than upserting by default, the row counts below climb on every run:
+# 2, then 4, then 6. The test fails for a reason that has nothing to do with the image,
+# which is worse than not testing at all.
+#
+# CREATE OR REPLACE does not help; it re-attaches to the existing Delta log just the
+# same. Clearing the prefix does. awscli is in the image and the MinIO credentials are
+# already in the environment from aws.env, so this needs no extra configuration.
+purge_table_paths() {
+  local endpoint="${AWS_ENDPOINT_URL:-http://minio:9000}"
+  command -v aws >/dev/null 2>&1 || return 0
+  for t in "emp_hudi_${SUFFIX}" "emp_delta_${SUFFIX}"; do
+    aws --endpoint-url "$endpoint" s3 rm --recursive --only-show-errors \
+      "s3://warehouse/$t" >/dev/null 2>&1 || true
+  done
+}
+purge_table_paths
+
 echo "== environment =="
 echo "  spark        $(spark-submit --version 2>&1 | grep -oE 'version [0-9]+\.[0-9]+\.[0-9]+' | head -1)"
 echo "  scala        ${SCALA_VERSION:-unset}"

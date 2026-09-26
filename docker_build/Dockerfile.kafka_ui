@@ -1,0 +1,16 @@
+# Kafka UI for the datalake stack.
+#
+# This one is the clearest case for wrapping. provectuslabs/kafka-ui is no longer
+# developed - v0.7.2 (Apr 2024) is the last build behind :latest - and the project
+# moved to kafbat/kafka-ui under a different image name. Pinning it here means the
+# day :latest is retired or repointed, the stack keeps starting and the migration
+# is a one-line change to this file.
+ARG KAFKA_UI_VERSION=v0.7.2
+FROM provectuslabs/kafka-ui:${KAFKA_UI_VERSION}
+
+ARG KAFKA_UI_VERSION
+LABEL maintainer="Ranga Reddy <rangareddy.avula@gmail.com>" \
+	description="Datalake Kafka UI image" \
+	upstream="provectuslabs/kafka-ui:${KAFKA_UI_VERSION}"
+
+# Pure re-tag. The Alpine base has wget, which the /actuator/health probe uses.

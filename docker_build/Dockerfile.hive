@@ -1,30 +1,68 @@
-ARG HIVE_VERSION=${HIVE_VERSION:-4.0.0}
-FROM apache/hive:$HIVE_VERSION
+# Hive 4 - runs twice in the stack, as the Metastore (SERVICE_NAME=metastore) and as
+# HiveServer2 (SERVICE_NAME=hiveserver2). Both come from this one image.
+ARG HIVE_VERSION=4.0.0
+FROM apache/hive:${HIVE_VERSION}
 
-SHELL ["/bin/bash", "-c"]
-
-LABEL maintainer="Ranga Reddy <rangareddy.avula@gmail.com>"
-LABEL description="Datalake Hive image"
+ARG HIVE_VERSION
+LABEL maintainer="Ranga Reddy <rangareddy.avula@gmail.com>" \
+	description="Datalake Hive image" \
+	upstream="apache/hive:${HIVE_VERSION}"
 
 USER root
 
-RUN apt-get update && \
-	apt-get install curl -y telnet vim jq net-tools && \
-	mkdir -p /home/hive/.beeline && \
+# One layer, and the apt lists are removed inside it: a separate `rm` in a later RUN
+# would leave the ~40MB of index files in this layer forever. net-tools and telnet stay
+# because the metastore healthcheck and the e2e test probe ports from inside here.
+#
+# The fallback is not defensive padding. This base is Debian bullseye, which left LTS
+# on 2026-08-31: bullseye-security still publishes an index advertising +deb11uN
+# packages, but its pool has been emptied, so apt resolves a version and then 404s on
+# every file it tries to fetch. archive.debian.org still carries the bullseye release
+# pool - slightly older packages, but actually present - so that is what the retry
+# points at. `jq --version` at the end is the same guard the Spark images use: an apt
+# failure that is swallowed produces an image that builds fine and breaks at runtime.
+RUN set -eux; \
+	install_pkgs() { \
+	apt-get -o Acquire::Check-Valid-Until=false update && \
+	apt-get install -y --no-install-recommends curl telnet vim jq net-tools; \
+	}; \
+	if ! install_pkgs; then \
+	echo "bullseye-security pool is empty, falling back to archive.debian.org"; \
+	printf 'deb http://archive.debian.org/debian bullseye main\n' >/etc/apt/sources.list; \
+	rm -rf /var/lib/apt/lists/*; \
+	install_pkgs; \
+	fi; \
+	jq --version; \
+	apt-get clean; \
+	rm -rf /var/lib/apt/lists/*; \
+	mkdir -p /home/hive/.beeline; \
 	chown hive /home/hive/.beeline
 
+# Hive 4 puts neither the S3A connector nor the AWS SDK on its own classpath, so every
+# s3a:// path fails with ClassNotFoundException until they are linked in. Symlinks, not
+# copies: the jars are already in the image and a copy would add ~200MB to this layer.
+# The guava link is the reverse problem - Hive's bundled guava is older than the one
+# Hadoop's code paths expect, so Hadoop's wins.
+#
+# log4j-slf4j-impl is deleted because Hive ships it alongside another SLF4J binding;
+# two bindings on one classpath make SLF4J pick arbitrarily and log a multi-binding
+# warning on every single command.
 RUN ln -sf $HADOOP_HOME/share/hadoop/common/lib/guava-27.0-jre.jar $HIVE_HOME/lib/ \
 	&& ln -sf $HADOOP_HOME/share/hadoop/tools/lib/aws-java-sdk-bundle-*.jar $HIVE_HOME/lib/ \
 	&& ln -sf $HADOOP_HOME/share/hadoop/tools/lib/hadoop-aws*.jar $HIVE_HOME/lib/ \
 	&& ln -sf $HADOOP_HOME/share/hadoop/tools/lib/aws-java-sdk-bundle-*.jar $HADOOP_HOME/share/hadoop/common/lib/ \
 	&& ln -sf $HADOOP_HOME/share/hadoop/tools/lib/hadoop-aws-$HADOOP_VERSION.jar $HADOOP_HOME/share/hadoop/common/lib/ \
-	&& rm /opt/hive/lib/log4j-slf4j-impl-*.jar
+	&& rm $HIVE_HOME/lib/log4j-slf4j-impl-*.jar
 
 COPY conf/hive/* $HIVE_HOME/conf/
 COPY db_connector_jars/* $HIVE_HOME/lib/
 
-ARG HUDI_VERSION=${HUDI_VERSION:-1.1.1}
-RUN curl -s https://repo1.maven.org/maven2/org/apache/hudi/hudi-hadoop-mr-bundle/${HUDI_VERSION}/hudi-hadoop-mr-bundle-${HUDI_VERSION}.jar \
+# Lets Hive read Hudi tables written by Spark or Flink (the input formats live here).
+# -f matters: without it curl writes the 404 body into the file and the build "succeeds"
+# with an HTML page named .jar, which only shows up later as a ZipException.
+ARG HUDI_VERSION=1.1.1
+ARG MVN_REPO_URL=https://repo1.maven.org/maven2
+RUN curl -fsSL "$MVN_REPO_URL/org/apache/hudi/hudi-hadoop-mr-bundle/${HUDI_VERSION}/hudi-hadoop-mr-bundle-${HUDI_VERSION}.jar" \
 	-o $HIVE_HOME/lib/hudi-hadoop-mr-bundle-${HUDI_VERSION}.jar
 
 USER hive

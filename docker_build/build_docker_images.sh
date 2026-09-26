@@ -1,14 +1,41 @@
 #!/bin/bash
 set -e
 
-# Define constants
 CURRENT_DIR="$(
   cd "$(dirname "$0")"
   pwd -P
 )"
 DOCKER_HUB_USERNAME="rangareddy1988"
+
+# ---------------------------------------------------------------------------- tag
+# Every image this repo builds carries one tag, and it is the tag of the *stack*, not
+# of the component inside it: rangareddy1988/ranga-<name>:1.0.0.
+#
+# The component versions below are what 1.0.0 is made of. They are build arguments and
+# nothing else - changing Spark from 3.5.9 to 3.5.10 does not produce ranga-spark:3.5.10,
+# it produces a different 1.0.0. When a migration changes the stack in a way worth
+# telling people about, bump IMAGE_VERSION and update the table in README.md; until
+# then, one number describes the whole set and compose needs exactly one pin.
+IMAGE_VERSION=${IMAGE_VERSION:-1.0.0}
+
+# ------------------------------------------------------------------- tech stack 1.0.0
 HIVE_VERSION=${HIVE_VERSION:-4.0.0}
 SPARK_VERSION=${SPARK_VERSION:-3.5.9}
+TRINO_VERSION=${TRINO_VERSION:-483}
+KAFKA_CONNECT_VERSION=${KAFKA_CONNECT_VERSION:-7.4.7}
+CONFLUENT_KAFKACAT_VERSION=${CONFLUENT_KAFKACAT_VERSION:-7.1.15}
+
+# Third-party services are rebuilt under rangareddy1988/ranga-* rather than pulled
+# straight from their publishers. The stack then depends only on tags this repo
+# controls, so an upstream retag, retirement or relicense is a rebuild here instead of
+# a broken stack everywhere. Every pin below is an exact version, never "latest".
+CONFLUENT_VERSION=${CONFLUENT_VERSION:-7.4.7}
+KAFKA_UI_VERSION=${KAFKA_UI_VERSION:-v0.7.2}
+POSTGRES_VERSION=${POSTGRES_VERSION:-16.4}
+MYSQL_VERSION=${MYSQL_VERSION:-8.0-20.04_edge}
+# MinIO is the exception: quay.io serves only :latest anonymously, so the base is
+# pinned by digest inside Dockerfile.minio. This is the label only.
+MINIO_VERSION=${MINIO_VERSION:-RELEASE.2025-09-07T16-13-09Z}
 
 # Everything below follows from SPARK_VERSION, because the Spark line dictates the
 # Scala binary, the bundled Hadoop, and which builds of Hudi/Iceberg/Delta exist.
@@ -72,15 +99,10 @@ case "$SPARK_MAJOR_VERSION" in
 esac
 SPARK_IMAGE="ranga-${SPARK_IMAGE_NAME}"
 export SPARK_IMAGE
-KAFKA_CONNECT_VERSION=${KAFKA_CONNECT_VERSION:-7.4.7}
-CONFLUENT_KAFKACAT_VERSION=${CONFLUENT_KAFKACAT_VERSION:-7.1.15}
+
 HADOOP_AWS_JARS_PATH="$CURRENT_DIR/hadoop-s3-jars"
 DB_CONNECTOR_JARS_PATH="$CURRENT_DIR/db_connector_jars"
 SOFTWARE_PATH="$CURRENT_DIR/software"
-TRINO_VERSION=${TRINO_VERSION:-483}
-JUPYTER_VERSION=${JUPYTER_VERSION:-latest}
-XTABLE_VERSION=${XTABLE_VERSION:-0.3.0}
-FLINK_VERSION=${FLINK_VERSION:-1.20.5}
 # Hadoop 3.3.x S3A uses AWS SDK v1 (com.amazonaws:aws-java-sdk-bundle); Hadoop 3.4.x
 # switched to SDK v2 (software.amazon.awssdk:bundle). Shipping the wrong one gives a
 # ClassNotFoundException on the first s3a:// call, so the profile picks.
@@ -88,21 +110,45 @@ AWS_JAVA_SDK_VERSION=${AWS_JAVA_SDK_VERSION:-1.12.262}
 AWS_SDK_V2_VERSION=${AWS_SDK_V2_VERSION:-2.29.52}
 MVN_REPO_URL="https://repo1.maven.org/maven2"
 
-
-# IMAGES limits the run to a subset, space or comma separated. Building all eight
-# takes a long time (xtable clones and mvn-installs from source), so a targeted
-# rebuild after touching one Dockerfile is:
+# ------------------------------------------------------------------------ selection
+# IMAGES limits the run to a subset, space or comma separated. It is the fast path
+# after editing one Dockerfile:
 #
 #   IMAGES=spark SPARK_VERSION=4.1.3 ./docker_build/build_docker_images.sh
+#
+# Three group names expand to sets, so the common cases need no list:
+#
+#   upstream  the third-party wrappers - seconds, since most add no layer
+#   engines   the images this repo assembles (spark, hive, connect, trino)
+#   core      everything docker-compose.yml starts, i.e. not the "all" extras
 IMAGES=${IMAGES:-}
+GROUP_UPSTREAM="kafka kafka-schema-registry kafka-rest kafka-ui postgres minio mysql"
+GROUP_ENGINES="hive $SPARK_IMAGE_NAME kafka-connect kafka-cat trino"
+GROUP_CORE="kafka kafka-schema-registry kafka-rest kafka-ui postgres minio hive $SPARK_IMAGE_NAME kafka-connect kafka-cat"
+
+expand_images() {
+  local out=""
+  for token in $(echo "$IMAGES" | tr ',' ' '); do
+    case "$token" in
+    upstream) out="$out $GROUP_UPSTREAM" ;;
+    engines) out="$out $GROUP_ENGINES" ;;
+    core) out="$out $GROUP_CORE" ;;
+    *) out="$out $token" ;;
+    esac
+  done
+  echo "$out"
+}
+IMAGES_EXPANDED="$(expand_images)"
+
 should_build() {
   [ -z "$IMAGES" ] && return 0
-  case " $(echo "$IMAGES" | tr ',' ' ') " in *" $1 "*) return 0 ;; *) return 1 ;; esac
+  case " $IMAGES_EXPANDED " in *" $1 "*) return 0 ;; *) return 1 ;; esac
 }
 
 # shellcheck source=/dev/null
 source $CURRENT_DIR/validate_docker_status.sh
 
+# ------------------------------------------------------------------------ downloads
 download_hadoop_aws_jars() {
   # Cache per Hadoop version, then stage a clean flat directory for the Docker build
   # context. Staging matters: the Spark image COPYs hadoop-s3-jars/* wholesale, so a
@@ -151,10 +197,6 @@ download_db_connector_jars() {
 
 download_software_tars() {
   mkdir -p "$SOFTWARE_PATH"
-  if [ ! -f "$SOFTWARE_PATH/hadoop-${HADOOP_VERSION}.tar.gz" ]; then
-    wget -P "$SOFTWARE_PATH" https://archive.apache.org/dist/hadoop/common/hadoop-${HADOOP_VERSION}/hadoop-${HADOOP_VERSION}.tar.gz
-  fi
-
   if [ ! -f "$SOFTWARE_PATH/spark-${SPARK_VERSION}-bin-hadoop3.tgz" ]; then
     wget -P "$SOFTWARE_PATH" https://archive.apache.org/dist/spark/spark-${SPARK_VERSION}/spark-${SPARK_VERSION}-bin-hadoop3.tgz
   fi
@@ -162,48 +204,69 @@ download_software_tars() {
 
 ARCH=$(get_docker_architecture)
 
-#sh download_and_build_hudi.sh
-should_build flink && sh $CURRENT_DIR/download_flink_jars.sh
+# Only fetch what the selected images actually COPY. IMAGES=upstream is otherwise a few
+# seconds of building behind several GB of tarballs nothing in that set consumes.
+needs_any() {
+  for name in "$@"; do should_build "$name" && return 0; done
+  return 1
+}
+needs_any "$SPARK_IMAGE_NAME" spark && download_software_tars
+needs_any "$SPARK_IMAGE_NAME" spark hive kafka-connect && download_hadoop_aws_jars
+needs_any hive trino && download_db_connector_jars
 
-download_software_tars
-download_hadoop_aws_jars
-download_db_connector_jars
-
-# Function to build Docker images
+# --------------------------------------------------------------------------- build
+# build_docker_image <image-name> <component-version> <dockerfile-suffix> <version-arg> [--build-arg ...]
+#
+# <component-version> is what goes into the image as a build arg; the *tag* is always
+# IMAGE_VERSION. <version-arg> is passed explicitly rather than derived from the image
+# name: deriving it silently sent KAFKA_CAT_VERSION to a Dockerfile that declares
+# CONFLUENT_KAFKACAT_VERSION, and Docker only warns about an unknown --build-arg, so
+# that image quietly built whatever its ARG default happened to be.
 build_docker_image() {
-  local image_name="$1"
-  local image_version="$2"
-  local dockerfile="$3"
-  local version_arg_override="${4:-}" # e.g. spark3 still takes SPARK_VERSION, not SPARK3_VERSION
-  shift 3
-  [ -n "$version_arg_override" ] && shift
-  local extra_args=("$@") # further --build-arg pairs, e.g. the Spark version matrix
+  local image_name="$1" component_version="$2" dockerfile="$3" version_arg="$4"
+  shift 4
+  local extra_args=("$@")
 
-  version_arg=$(echo "${image_name}_VERSION" | tr '[:lower:]' '[:upper:]')
-  local image_version_str="${version_arg//-/_}"
-  [ -n "$version_arg_override" ] && image_version_str="$version_arg_override"
-  if docker build --build-arg "$image_version_str=$image_version" "${extra_args[@]}" --platform linux/"$ARCH" -f "$CURRENT_DIR/Dockerfile.$dockerfile" "$CURRENT_DIR" -t "$DOCKER_HUB_USERNAME/ranga-$image_name:$image_version" -t "$DOCKER_HUB_USERNAME/ranga-$image_name:latest"; then
-    echo "Successfully built $image_name:$image_version"
+  local image="$DOCKER_HUB_USERNAME/ranga-$image_name"
+  if docker build \
+    --build-arg "$version_arg=$component_version" \
+    "${extra_args[@]}" \
+    --platform linux/"$ARCH" \
+    -f "$CURRENT_DIR/Dockerfile.$dockerfile" "$CURRENT_DIR" \
+    -t "$image:$IMAGE_VERSION" -t "$image:latest"; then
+    echo "Successfully built $image_name:$IMAGE_VERSION ($version_arg=$component_version)"
   else
-    echo "Failed to build $image_name:$image_version"
+    echo "Failed to build $image_name:$IMAGE_VERSION"
     exit 1
   fi
 }
 
+# image-name | component version | Dockerfile suffix | build-arg name
+#
+# The first block is the third-party wrappers: thin, pinned re-tags that move the stack
+# off tags other people control. The second is what this repo assembles.
+#
+# There is no separate zookeeper, minio-mc or jupyter image. cp-kafka already ships
+# zookeeper-server-start, the MinIO image already ships mc, and the Spark image already
+# ships JupyterLab and its kernels, so those three services run from ranga-kafka,
+# ranga-minio and ranga-spark respectively - about 4.8GB of duplicated content removed.
 declare -a image_builds=(
-  "hive $HIVE_VERSION hive"
-  "$SPARK_IMAGE_NAME $SPARK_VERSION $SPARK_DOCKERFILE"
-  "kafka-connect $KAFKA_CONNECT_VERSION kafka_connect"
-  "kafka-cat $CONFLUENT_KAFKACAT_VERSION kafka_cat"
-  "trino $TRINO_VERSION trino"
-  "jupyter-notebook $JUPYTER_VERSION jupyter"
-  "xtable $XTABLE_VERSION xtable"
-  "flink $FLINK_VERSION flink"
+  "kafka $CONFLUENT_VERSION kafka CONFLUENT_VERSION"
+  "kafka-schema-registry $CONFLUENT_VERSION kafka_schema_registry CONFLUENT_VERSION"
+  "kafka-rest $CONFLUENT_VERSION kafka_rest CONFLUENT_VERSION"
+  "kafka-ui $KAFKA_UI_VERSION kafka_ui KAFKA_UI_VERSION"
+  "postgres $POSTGRES_VERSION postgres POSTGRES_VERSION"
+  "minio $MINIO_VERSION minio MINIO_VERSION"
+  "mysql $MYSQL_VERSION mysql MYSQL_VERSION"
+  "hive $HIVE_VERSION hive HIVE_VERSION"
+  "$SPARK_IMAGE_NAME $SPARK_VERSION $SPARK_DOCKERFILE SPARK_VERSION"
+  "kafka-connect $KAFKA_CONNECT_VERSION kafka_connect KAFKA_CONNECT_VERSION"
+  "kafka-cat $CONFLUENT_KAFKACAT_VERSION kafka_cat CONFLUENT_KAFKACAT_VERSION"
+  "trino $TRINO_VERSION trino TRINO_VERSION"
 )
 
-# Iterate through the array and build images
 for build_config in "${image_builds[@]}"; do
-  IFS=' ' read -r image_name version dockerfile_ext <<<"$build_config"
+  IFS=' ' read -r image_name version dockerfile_ext version_arg <<<"$build_config"
   # "spark" selects whichever of spark3/spark4 this SPARK_VERSION resolves to, so the
   # familiar IMAGES=spark keeps working alongside IMAGES=spark4.
   if [ -n "$IMAGES" ] && [ "$image_name" = "$SPARK_IMAGE_NAME" ] && should_build spark; then
@@ -212,18 +275,17 @@ for build_config in "${image_builds[@]}"; do
     should_build "$image_name" || continue
   fi
   if [ "$image_name" = "$SPARK_IMAGE_NAME" ]; then
-    build_docker_image "$image_name" "$version" "$dockerfile_ext" SPARK_VERSION \
+    build_docker_image "$image_name" "$version" "$dockerfile_ext" "$version_arg" \
       --build-arg "SPARK_MAJOR_VERSION=$SPARK_MAJOR_VERSION" \
       --build-arg "SCALA_VERSION=$SCALA_VERSION" \
       --build-arg "HUDI_VERSION=$HUDI_VERSION" \
       --build-arg "ICEBERG_VERSION=$ICEBERG_VERSION" \
       --build-arg "DELTA_VERSION=$DELTA_VERSION"
   else
-    build_docker_image "$image_name" "$version" "$dockerfile_ext"
+    build_docker_image "$image_name" "$version" "$dockerfile_ext" "$version_arg"
   fi
 done
 
-# Prune unused Docker images
 if docker image prune -f; then
   echo "Successfully pruned unused Docker images."
 else

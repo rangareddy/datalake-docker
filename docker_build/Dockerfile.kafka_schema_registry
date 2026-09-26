@@ -1,0 +1,13 @@
+# Confluent Schema Registry for the datalake stack.
+#
+# Wrapped rather than used directly so the stack pulls a tag this repo controls;
+# see Dockerfile.zookeeper for why.
+ARG CONFLUENT_VERSION=7.4.7
+FROM confluentinc/cp-schema-registry:${CONFLUENT_VERSION}
+
+ARG CONFLUENT_VERSION
+LABEL maintainer="Ranga Reddy <rangareddy.avula@gmail.com>" \
+	description="Datalake Kafka Schema Registry image" \
+	upstream="confluentinc/cp-schema-registry:${CONFLUENT_VERSION}"
+
+# Pure re-tag; the base already has nc for the healthcheck.

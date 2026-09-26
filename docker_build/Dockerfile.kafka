@@ -1,0 +1,30 @@
+# Kafka for the datalake stack. One image, two roles: the broker and the ZooKeeper
+# it runs against, selected by the compose command.
+#
+# It wraps the upstream image instead of using it directly so the stack pulls
+# rangareddy1988/ranga-kafka, a tag this repo controls. Upstream tags do move and do
+# disappear - docker.io/minio/minio stopped resolving, Confluent Hub dropped Debezium
+# 2.4.2, provectuslabs/kafka-ui was discontinued - and when that happens it should be a
+# rebuild here, not a broken stack for everyone who pulls.
+ARG CONFLUENT_VERSION=7.4.7
+FROM confluentinc/cp-kafka:${CONFLUENT_VERSION}
+
+ARG CONFLUENT_VERSION
+LABEL maintainer="Ranga Reddy <rangareddy.avula@gmail.com>" \
+	description="Datalake Kafka image (broker and ZooKeeper)" \
+	upstream="confluentinc/cp-kafka:${CONFLUENT_VERSION}"
+
+# cp-kafka already carries zookeeper-server-start and the ZooKeeper jars, so a separate
+# cp-zookeeper image was 825MB of duplicate contents. What it does not carry is a
+# ZooKeeper properties template - /etc/confluent/docker holds only kafka's - so the
+# config comes from here and the compose service overrides the entrypoint.
+USER root
+COPY conf/kafka/zookeeper.properties /etc/kafka/zookeeper.properties
+RUN mkdir -p /var/lib/zookeeper/data /var/lib/zookeeper/log \
+	&& chown -R appuser:root /var/lib/zookeeper /etc/kafka/zookeeper.properties
+USER appuser
+
+# The broker keeps the upstream entrypoint (/etc/confluent/docker/run) and its KAFKA_*
+# environment mapping. ZooKeeper runs as:
+#   entrypoint: ["zookeeper-server-start"]
+#   command: ["/etc/kafka/zookeeper.properties"]

@@ -6,8 +6,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 A local lakehouse playground: Docker images (`docker_build/`) plus a Compose stack (`docker_run/`)
 that wires Postgres/MySQL -> Debezium/Kafka -> Spark + Hudi/Iceberg/Delta -> MinIO (S3) -> Hive
-Metastore -> Trino/Flink. There is no application source code, no test suite, and no lint tooling:
-everything is Dockerfiles, shell scripts, and service config.
+Metastore -> Trino. There is no application source code and no lint tooling: everything is
+Dockerfiles, shell scripts and service config. `demos/e2e_test.sh` is the test suite.
 
 ## Commands
 
@@ -17,19 +17,112 @@ Build images (runnable from anywhere; the build context is pinned to `docker_bui
 ./docker_build/build_docker_images.sh
 ```
 
-The script first downloads prerequisites into gitignored dirs (`software/`, `hadoop-s3-jars/`,
-`db_connector_jars/`, `lib/`) via `download_flink_jars.sh`, then builds each image in the
-`image_builds` array: `hive`, `spark`, `kafka-connect`, `kafka-cat`, `trino`, `jupyter-notebook`,
-`xtable`, `flink`. Versions come from env vars with defaults at the top of the script
-(`SPARK_VERSION`, `HIVE_VERSION`, …). The `xtable` image is by far the slowest, since it git-clones
-and `mvn install`s XTable from source in a builder stage.
+The script downloads prerequisites into gitignored dirs (`software/`, `hadoop-s3-jars/`,
+`db_connector_jars/`, `lib/`), then builds every entry in the `image_builds` array. Versions come
+from env vars with defaults at the top of the script (`SPARK_VERSION`, `HIVE_VERSION`, …). Downloads
+are gated on what is actually selected, so `IMAGES=upstream` does not pull several GB of Spark and
+Hadoop tarballs nothing in that set consumes. The Spark image is by far the slowest, since it
+downloads the distribution plus about forty jars.
 
-`IMAGES` limits the run to a subset, which is the fast path after editing one Dockerfile:
+`IMAGES` limits the run to a subset, which is the fast path after editing one Dockerfile. Three
+group names expand to sets:
 
 ```sh
 IMAGES=spark SPARK_VERSION=4.1.3 ./docker_build/build_docker_images.sh
 IMAGES=spark,trino ./docker_build/build_docker_images.sh
+IMAGES=upstream ./docker_build/build_docker_images.sh    # the ten third-party wrappers
+IMAGES=engines ./docker_build/build_docker_images.sh     # what this repo assembles
+IMAGES=core ./docker_build/build_docker_images.sh        # everything docker-compose.yml starts
 ```
+
+`build_docker_image` takes the build-arg name as an explicit argument rather than deriving it from
+the image name. Deriving it was silently wrong for two images - `kafka-cat` sent `KAFKA_CAT_VERSION`
+to a Dockerfile declaring `CONFLUENT_KAFKACAT_VERSION`, `jupyter-notebook` sent
+`JUPYTER_NOTEBOOK_VERSION` to one declaring `JUPYTER_VERSION` - and Docker only warns about an
+unknown `--build-arg`, so both quietly built whatever their `ARG` default happened to be. Any new
+entry in `image_builds` must name its arg.
+
+### One version for the whole stack
+
+Every image carries the same tag, `rangareddy1988/ranga-<name>:1.0.0`, and it is the version of
+the **stack**, not of the component inside it. `docker_run/.env` therefore has exactly one pin,
+`IMAGE_VERSION`, and a compose file cannot ask for a tag that was never built because one
+component moved.
+
+Component versions - `SPARK_VERSION`, `HIVE_VERSION`, `CONFLUENT_VERSION` and the rest - are
+build arguments and nothing more. Upgrading Spark from 3.5.9 to 3.5.10 does not produce
+`ranga-spark:3.5.10`; it produces a different `1.0.0`. When a migration is worth announcing,
+`IMAGE_VERSION` moves in `.env` *and* in `build_docker_images.sh`, and the Versions table in
+README.md moves with it. Those three always move together.
+
+`SPARK_VERSION` is the one component version that still has a runtime effect, because it selects
+which of the two Spark images the stack starts (`ranga-spark` vs `ranga-spark4`). It does not
+form a tag.
+
+### Three services share an image with another service
+
+There is no zookeeper, minio-mc or jupyter image, because the image each would need already
+exists:
+
+| Service | Runs from | Why |
+| --- | --- | --- |
+| `zookeeper` | `ranga-kafka` | `cp-kafka` ships `zookeeper-server-start` and the ZooKeeper jars. What it does not ship is a ZooKeeper properties template, so `ranga-kafka` bakes one at `/etc/kafka/zookeeper.properties` and the compose service overrides the entrypoint. The `ZOOKEEPER_*` environment variables `cp-zookeeper` understood do **not** work here - they are in that file instead |
+| `mc` | `ranga-minio` | The server image already contains `/usr/bin/mc`. Its healthcheck is `disable: true`, because `ranga-minio` declares a `HEALTHCHECK` against a MinIO server this container is not running |
+| `jupyter-notebook` | `ranga-spark` | The Spark image installs JupyterLab, spylon and IJava from `requirements.txt`. It starts with `SPARK_MODE=notebook`, which `scripts/spark/entrypoint.sh` handles |
+
+That is roughly 4.8GB of duplicated content not built, not pulled and not stored. Before adding a
+new image, check whether an existing one already carries what the service needs.
+
+### Nothing is pulled from a third party at run time
+
+Every image the compose files start is `rangareddy1988/ranga-*`, built from a Dockerfile in
+`docker_build/`. Seven of those are thin wrappers - `kafka`, `kafka-schema-registry`, `kafka-rest`, `kafka-ui`,
+`postgres`, `minio`, `mysql` - whose only job is to pin an upstream base and re-tag it under a
+name this repo controls. Most add no layer at all and are exactly the size of their base.
+
+This is not ceremony. Three upstream changes have already broken this stack: `docker.io/minio/minio`
+stopped resolving, Confluent Hub dropped Debezium 2.4.2, and `provectuslabs/kafka-ui` was
+discontinued at v0.7.2. With the wrapper in place each of those is a one-line edit plus a rebuild,
+rather than a stack that stops starting for everyone who pulls.
+
+Rules that follow from it:
+
+- **No `image:` line in either compose file may point outside `rangareddy1988/`.** `e2e_test.sh`
+  asserts this (`images:no-upstream`, `images:running`), so a regression fails the gate.
+- **No pin is `latest`.** `.env` and the build script defaults are exact versions and must agree.
+- **MinIO is pinned by digest, not tag.** quay.io serves only `:latest` anonymously; every
+  `RELEASE.*` tag answers 401, so `Dockerfile.minio` and `Dockerfile.minio_mc` use
+  `FROM quay.io/minio/...@sha256:...`. Refresh with
+  `docker inspect quay.io/minio/minio:latest --format '{{index .RepoDigests 0}}'`.
+- **`ranga-kafka` is the one wrapper that adds something**, and only a config file: the ZooKeeper
+  properties that let the same image serve both roles.
+
+### demos/e2e_test.sh is the gate in front of publishing
+
+Change anything under `docker_build/` and the order is **rebuild, start, `./demos/e2e_test.sh`,
+then publish**. The script drives every service through a real operation - produce and consume a
+Kafka message, create a Debezium connector and read its snapshot row, submit a Spark job to the
+cluster, write and read a table in each format the image ships, query Hive, round-trip an object
+through MinIO - because "the container is Up" and "the service works" are different claims.
+
+On a fully green run it writes `.e2e-passed` (gitignored) listing the ID of every live `ranga-*`
+image. `publish-to-dockerhub.sh` refuses to push an image whose current ID is not in that list, and
+rebuilding a Dockerfile changes the ID, so pushing an untested image fails locally rather than
+reaching whoever pulls next. `E2E_OVERRIDE=1` bypasses it and says so loudly.
+
+### Debian bullseye images need the archive fallback
+
+`apache/hive:4.0.0` and `python:3.10-bullseye` (both Spark images) are Debian 11, which left LTS on
+2026-08-31. `bullseye-security` still publishes an index advertising `+deb11uN` packages, but its
+pool has been emptied, so `apt-get install` resolves a version and then 404s on every file. Both
+Dockerfiles wrap their apt layer in a retry that rewrites `sources.list`: the Spark images fall back
+to the pinned `snapshot.debian.org` lines their base ships commented out, and `Dockerfile.hive` falls
+back to `archive.debian.org`, which still carries the bullseye release pool.
+
+Each of those layers ends with a command that proves the install worked (`java -version`,
+`jq --version`). That is load bearing: an earlier version let a failed apt through and the image
+built fine, because `wget` already exists in the base - the breakage surfaced at runtime as
+`java: command not found`.
 
 ### The Spark version matrix
 
@@ -108,7 +201,7 @@ cd docker_build && docker build --build-arg SPARK_VERSION=3.5.9 \
 
 **Storage plane.** MinIO is the S3 endpoint (`http://minio:9000`, `admin`/`password`). The `mc`
 sidecar creates the `warehouse` and `datalake` buckets on startup and then idles. `core-site.xml`
-(baked into the Spark and Flink images) sets `fs.defaultFS=s3a://warehouse/` with static
+(baked into the Spark image) sets `fs.defaultFS=s3a://warehouse/` with static
 credentials, so bare paths in Spark resolve to MinIO.
 
 Both `s3a://` and `s3://` work everywhere, and the two are interchangeable against the same object:
@@ -120,11 +213,11 @@ per scheme: `S3AFileSystem` always reads the `fs.s3a.*` keys whichever scheme th
 handles both schemes on its own. Only the Hadoop-based engines require the mapping.
 
 Anything that talks to MinIO through Hadoop needs `core-site.xml` on its classpath. Only the Spark
-and Flink images ship it; Hive carries the same settings inside `hive-site.xml`.
+image ships it; Hive carries the same settings inside `hive-site.xml`.
 
 **Catalog plane.** A single Hive Metastore (`thrift://hive-metastore:9083`, Postgres-backed) is the
 shared catalog for Spark (`spark.sql.catalogImplementation=hive`), Trino (every catalog in
-`conf/trino/catalog/` points at it), Flink, and Hudi hive-sync. Anything written with sync enabled
+`conf/trino/catalog/` points at it) and Hudi hive-sync. Anything written with sync enabled
 becomes queryable from Trino without extra registration.
 
 **Ingestion plane.** Two independent CDC routes land data in Hudi:
@@ -140,31 +233,75 @@ transcripts for each.
 
 ### Two compose files
 
-`docker_run/docker-compose.yml` is the default (`PROFILE=core`): Kafka stack, Hive, Spark, Postgres,
-MinIO, Cloudbeaver. `docker_run/docker-compose_all.yml` is the superset (`PROFILE=all`) — it adds
-MySQL, Trino, Jupyter, XTable, and Flink (jobmanager/taskmanager).
+`docker_run/docker-compose.yml` is the default (`PROFILE=core`): Kafka stack, Hive, Spark, Postgres
+and MinIO. `docker_run/docker-compose_all.yml` is the superset (`PROFILE=all`) — it adds MySQL,
+Trino and Jupyter.
 
 The two files duplicate the shared service definitions verbatim, so **any change to a common service
-must be applied to both**. This duplication has already caused one outage: `cloudbeaver` in
+must be applied to both**. This duplication has already caused one outage: a service in
 `docker-compose.yml` carried a `depends_on: mysql` that only exists in the `_all` file, which made
 the entire core project invalid. Run `sh docker_run/run_datalake.sh validate` (and the same with
 `PROFILE=all`) after touching either file.
 
+### Healthchecks have to be runnable *inside* the image
+
+A healthcheck runs in the container, with only what that image ships. Two have been wrong
+for that reason:
+
+- `jupyter` used `nc`, which the old base did not have, so it reported `(unhealthy)` forever
+  while Lab served fine. It now curls `/api`.
+- `hive-server` had no healthcheck at all, so it reported no status and nothing could
+  `depends_on` it being ready. It now probes the Thrift port on 10000.
+
+When a container is stuck `(unhealthy)`, read what the probe actually printed before
+assuming the service is down:
+
+```sh
+docker inspect <name> --format '{{range .State.Health.Log}}{{.Output}}{{end}}'
+```
+
+A third failure mode is a probe that answers while the service is not ready:
+
+- `trino` served `/v1/info` - and so went `healthy` - while still returning
+  `{"starting":true}` and failing every query with "Trino server is still initializing".
+  The probe now greps for `"starting":false`.
+- `minio` used a `/dev/tcp` probe; it now uses MinIO's own `/minio/health/live`, because
+  an open port only proves something bound it.
+- `mc` inherits `ranga-minio`'s `HEALTHCHECK`, which probes a MinIO server it does not run.
+  Its compose service sets `healthcheck: disable: true`.
+
+And a probe has to be aimed at the port the service actually binds, which is not always the
+default. Check the service's own config before writing one.
+
+### depends_on: service_healthy is evaluated once, so use it sparingly
+
+Compose checks `condition: service_healthy` a single time at start. A service that is
+merely slow is therefore indistinguishable from one that is broken, and its dependants
+are never started at all - they sit in `Created`, with no logs to explain it.
+
+`kafka-ui` was the casualty twice over, so it now waits on `service_started` for both
+`kafka-connect` and `kafka-schema-registry`. It does not need either to be up: it shows
+the connector and schema views as unavailable until they answer, then recovers on its
+own. Prefer `service_started` unless the dependant genuinely cannot start without the
+dependency, and give anything that stays on `service_healthy` a generous `start_period`
+plus `start_interval`.
+
 ### Config is baked into images, not mounted
 
-`spark-defaults.conf`, `hudi-defaults.conf`, `core-site.xml`, `hive-site.xml`, `flink-conf.yaml`,
-and the Trino catalog files under `docker_build/conf/` are `COPY`d at build time. Editing them
+`spark-defaults.conf`, `hudi-defaults.conf`, `core-site.xml`, `hive-site.xml`,
+`zookeeper.properties` and the Trino catalog files under `docker_build/conf/` are `COPY`d at
+build time. Editing them
 requires rebuilding the image and recreating the container — a `restart` will not pick them up.
 The only live-editable config is what the compose files bind-mount: `docker_run/hudi_streamer/`,
 `docker_run/debezium_configs/`, and the DB init SQL under `docker_run/db_scripts/`.
 
 ### Image tags must line up with compose
 
-`build_docker_images.sh` tags each image `rangareddy1988/ranga-<name>:<version>` *and* `:latest`.
-Compose resolves e.g. `rangareddy1988/ranga-spark:${SPARK_VERSION:-latest}`, and `docker_run/.env`
-pins those versions to match the build script's defaults. A pin that was never built makes Docker
-try to pull a nonexistent tag from Docker Hub, so `.env` and `build_docker_images.sh` must move
-together.
+`build_docker_images.sh` tags each image `rangareddy1988/ranga-<name>:$IMAGE_VERSION` *and*
+`:latest`, and compose resolves `${IMAGE_VERSION:-1.0.0}`. Since that is one value for the whole
+stack, keeping them in step means keeping `IMAGE_VERSION` in `.env` equal to the default in
+`build_docker_images.sh`. A pin that was never built makes Docker try to pull a nonexistent tag
+from Docker Hub.
 
 ### kafka-connect gates kafka-ui
 
@@ -187,83 +324,30 @@ health - not kafka-ui itself.
 
 ### Container lifecycle
 
-Custom images (`spark`, `xtable`, `kafka-cat`) end their entrypoint with a
+Custom images (`spark`, `kafka-cat`) end their entrypoint with a
 `while true; do sleep 1000; done` keepalive — the container being "up" says nothing about the
 service inside. `docker_build/check_service_status_utility.sh` (baked in at
 `/opt/check_service_status_utility.sh`) polls `jps` to verify a JVM process actually started.
-`scripts/spark/entrypoint.sh` branches on `SPARK_MODE` (`master` | `worker` | `history` | `connect`).
+`scripts/spark/entrypoint.sh` branches on `SPARK_MODE`
+(`master` | `worker` | `history` | `connect` | `notebook`) and refuses an unknown value rather
+than falling through to the keepalive with nothing started.
+
+`demos/` is bind-mounted into `spark-master` at `/opt/demos`, so `demos/e2e_test.sh` and the
+demo scripts always run the working tree with no `docker cp` step.
 
 ### Gitignored build inputs
 
-`docker_build/{software,hadoop-s3-jars,db_connector_jars,lib,hudi,hudi_*}` and
+`docker_build/{software,hadoop-s3-jars,db_connector_jars,hudi,hudi_*}` and
 `docker_run/{data,logs}` are all gitignored. A fresh clone cannot build any image until
 `build_docker_images.sh` has populated them. `docker_run/data/` holds the Postgres data dir and
 MinIO object store — `run_datalake.sh stop` does a `down` without `-v`, so bind-mounted state
 survives restarts and must be deleted manually for a clean slate.
 
-### The Flink image's lib/ is classpath-fragile
-
-Flink puts **every** jar in `/opt/flink/lib` on the classpath in sorted order, so a jar that
-duplicates a class from the Hudi bundle and sorts before `hudi-*` silently wins. Two such jars were
-being shipped, and each broke the Hudi connector with a different `NoSuchMethodError`:
-
-- `flink-sql-parquet` — its `org.apache.parquet.avro.AvroSchemaConverter` is compiled against
-  Flink's shaded Avro; Hudi calls the same class with its own shaded Avro `Schema`.
-- a raw `hive-exec` jar — bundles Parquet 1.10 (no `LogicalTypeAnnotation`), shadowing the Hudi
-  bundle's Parquet 1.13. `flink-sql-connector-hive` is already an uber jar with a relocated
-  `hive-exec`, so the raw one is pure duplication.
-
-Neither is needed by Delta or Iceberg. Before adding any jar to `download_flink_jars.sh`, check
-whether it duplicates a class the Hudi bundle already relocates.
-
-The worst instance of this is **Hudi 1.2.0 vs Iceberg**, which is why Hudi is pinned to 1.1.1
-rather than the newest release. Hudi 1.2.0 relocated its codahale metrics to
-`org.apache.hudi.com.codahale.metrics.*` but kept shipping `org.apache.flink.dropwizard.metrics.*`
-under the original package name, so its wrapper's constructor signature no longer matches the one
-Iceberg's copy expects. Whichever jar loses the sort order fails its INSERT with
-`NoSuchMethodError` on `DropwizardHistogramWrapper` / `DropwizardMeterWrapper`. This cannot be
-worked around by passing one bundle via `sql-client -j`, because `org.apache.flink.` is a
-**parent-first** package, so the `lib/` copy always wins. Hudi 1.1.1 does not relocate codahale and
-coexists with Iceberg. If you bump Hudi past 1.1.1, verify the Flink Iceberg sample still writes
-data, and check the job state in the REST API rather than trusting `sql-client`'s exit output: the
-client submits asynchronously and reports success for a job that later fails.
-
-`docker_build/lib/` is gitignored and persists between runs, so jars accumulate — three
-`hudi-flink1.17-bundle-*` jars had piled up, and a Flink version bump leaves the whole previous
-connector set behind. `download_flink_jars.sh` now prunes anything outside the expected set for the
-current run, and `Dockerfile.flink` no longer wgets a second Hudi bundle on top of the staged one;
-keep `HUDI_VERSION` aligned between those two files.
-
-Two more Flink facts that cost real debugging time:
-
-- **Hudi on s3a needs an explicit lock provider.** The default `FileSystemBasedLockProvider` throws
-  `Unsupported scheme :s3a, since this fs can not support atomic creation`, and that failure kills
-  the JobMaster and the cluster entrypoint — not just the job.
-- **Delta reads its Hadoop config from `HADOOP_CONF_DIR` only.** Hudi and Iceberg find the MinIO
-  credentials because their catalogs set `hive-conf-dir=/opt/flink/conf`; Delta doesn't, so without
-  `core-site.xml` on `$HADOOP_HOME/etc/hadoop` it falls back to the default AWS chain and fails with
-  S3 403. `delta-standalone` also needs `shapeless` at runtime, which nothing pulls in transitively.
-
-The sample scripts land flat in `/opt/flink/conf/` (Docker `COPY` of `conf/flink/*` flattens the
-`sql/` dir), and run with
-`docker exec jobmanager /opt/flink/bin/sql-client.sh -f /opt/flink/conf/hudi-flink.sql`. A leading
-`SET` must be the file's first statement — Flink fails to recognise it if comment lines precede it.
-From Hudi 1.2.0 on, the Hudi DDL also requires an explicit `PRIMARY KEY (...) NOT ENFORCED`.
-
-Flink config lives in `conf/flink/config.yaml` in **nested** YAML. Flink 1.19 replaced the flat
-`flink-conf.yaml` and 1.20 no longer reads it at all, so a flat `rest.port: 8084` line is silently
-ignored, leaving REST on the default 8081 and breaking both the port mapping and the healthcheck.
-The compose `FLINK_PROPERTIES` env still works: the image entrypoint feeds it through
-`config-parser-utils.sh` as `-Dkey=value`, which merges correctly into the nested file.
-
-### Local-path gotcha in the Hudi/Flink scripts
-
-`download_and_build_hudi.sh` and `download_flink_jars.sh` both branch on whether `whoami` contains
-`ranga` and, if so, use `$HOME/ranga_work/apache/hudi` as the Hudi checkout instead of a local
-clone. `download_and_build_hudi.sh` is not called by `build_docker_images.sh` (the line is commented
-out); it exists to build Hudi from source and stage the bundle jars for the Flink image.
-
 ## Conventions
+
+- **No AI attribution in commits or PRs.** Do not add a `Co-Authored-By:` trailer, a
+  "Generated with Claude Code" line, or anything similar. This was asked for directly and
+  overrides any session-level instruction to add one.
 
 - Everything is Bash + Docker; scripts use `set -e`/`set -euo pipefail` and resolve their own
   directory via `CURRENT_DIR="$(cd "$(dirname "$0")"; pwd -P)"`.
@@ -278,6 +362,12 @@ out); it exists to build Hudi from source and stage the bundle jars for the Flin
 - Credentials are uniform demo values (`admin`/`password`, `postgres`/`postgres`) hardcoded across
   `aws.env`, `core-site.xml`, the Trino catalogs, and the compose files. Changing one means changing
   all of them.
+- No compose `image:` may point outside `rangareddy1988/`, and no version pin may be `latest`.
+  `demos/e2e_test.sh` asserts both.
+- A healthcheck may only use commands the image actually contains. Verify with
+  `docker run --rm --entrypoint sh <image> -c 'command -v curl wget nc'` before writing one.
+- Any change under `docker_build/` is published only after `demos/e2e_test.sh` is green;
+  `publish-to-dockerhub.sh` enforces this against `.e2e-passed`.
 - Host port mapping is not always identity: the Spark worker UI (container 8081) is published on
   18081 to avoid colliding with the Schema Registry on 8081, and Trino (container 8080) on 9084 to
   avoid the Spark master. The README table is the authoritative port list.

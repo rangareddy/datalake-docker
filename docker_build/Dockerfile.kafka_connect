@@ -1,34 +1,50 @@
-ARG KAFKA_CONNECT_VERSION=${KAFKA_CONNECT_VERSION:-7.4.7}
-FROM confluentinc/cp-server-connect-base:$KAFKA_CONNECT_VERSION
+# Kafka Connect for the datalake stack: Debezium CDC out of Postgres, plus the S3,
+# HDFS and JDBC sinks and the Hudi connector.
+ARG KAFKA_CONNECT_VERSION=7.4.7
+FROM confluentinc/cp-server-connect-base:${KAFKA_CONNECT_VERSION}
 
 SHELL ["/bin/bash", "-c"]
 
-LABEL maintainer="Ranga Reddy <rangareddy.avula@gmail.com>"
-LABEL description="Datalake Kafka Connect image"
+ARG KAFKA_CONNECT_VERSION
+LABEL maintainer="Ranga Reddy <rangareddy.avula@gmail.com>" \
+	description="Datalake Kafka Connect image" \
+	upstream="confluentinc/cp-server-connect-base:${KAFKA_CONNECT_VERSION}"
 
 USER root
 
-RUN set -ex; \
-	yum update -y && yum install -y curl wget tar vim git jq;
+# No `yum update -y`. It rewrote most of the base OS into this layer for no benefit -
+# the point of pinning 7.4.7 is that the contents do not drift - and the cache is
+# dropped in the same RUN so it never reaches the image.
+RUN yum install -y curl wget tar vim git jq \
+	&& yum clean all \
+	&& rm -rf /var/cache/yum
 
 ARG CONFLUENT_HUB_COMPONENTS="/usr/share/confluent-hub-components"
 ARG CONNECTORS_PATH="/opt/connectors"
 ARG DATA_PATH="/opt/data"
-ARG HUDI_VERSION=${HUDI_VERSION:-1.1.1}
-# Debezium 2.5.4 is the newest release that still runs here, and both halves of that
-# sentence matter:
+ARG HUDI_VERSION=1.1.1
+
+# Every connector is pinned. These used to be `:latest`, which meant two builds of the
+# same Dockerfile could produce different images and a Hub release could break the
+# stack with no change here. The versions below are the ones a working image resolved
+# to, so this is the same set, now reproducible.
+ARG HDFS2_SOURCE_VERSION=3.1.9
+ARG HDFS3_VERSION=3.0.22
+ARG HDFS3_SOURCE_VERSION=3.1.9
+ARG S3_VERSION=12.1.13
+ARG S3_SOURCE_VERSION=3.1.9
+ARG JDBC_VERSION=10.9.9
+# Debezium 2.5.4 is the newest release that runs here, and both halves matter:
 #
-#   - Confluent Hub no longer serves 2.4.2 at all. The oldest it offers is 2.5.3, so the
-#     previous pin failed the build outright with "Component not found".
-#   - Debezium 3.x is compiled for Java 17 (class file 61.0) and this base image,
-#     confluentinc/cp-server-connect-base:7.4.7, runs Java 11 (class file 55.0). A 3.x
-#     connector loads far enough to be scanned and then kills Connect at startup with
-#     UnsupportedClassVersionError, which looks like a healthcheck problem: Connect never
-#     binds 8083, so kafka-ui sits in Created forever waiting on a dependency that is
-#     restarting in a loop.
+#   - Confluent Hub no longer serves 2.4.2 at all; the oldest it offers is 2.5.3, so
+#     the previous pin failed the build outright with "Component not found".
+#   - Debezium 3.x is compiled for Java 17 (class file 61.0) and this base runs Java 11
+#     (class file 55.0). A 3.x connector is scanned at startup and kills Connect with
+#     UnsupportedClassVersionError, which presents as a healthcheck problem: Connect
+#     never binds 8083, so kafka-ui waits on a dependency that is restarting in a loop.
 #
-# Moving to Debezium 3.x means moving to a Confluent base image built on Java 17.
-ARG DEBEZIUM_VERSION=${DEBEZIUM_VERSION:-2.5.4}
+# Moving to Debezium 3.x means moving to a Confluent base built on Java 17.
+ARG DEBEZIUM_VERSION=2.5.4
 
 ENV CONNECT_PLUGIN_PATH="/usr/share/java,$CONFLUENT_HUB_COMPONENTS,$CONNECTORS_PATH" \
 	CONNECT_LOG4J_ROOT_LOGLEVEL="INFO" \
@@ -40,25 +56,31 @@ ENV CONNECT_PLUGIN_PATH="/usr/share/java,$CONFLUENT_HUB_COMPONENTS,$CONNECTORS_P
 	CONNECT_OFFSET_STORAGE_TOPIC="_connect_offsets" \
 	HUDI_KAFKA_CONNECTOR_PATH=$CONFLUENT_HUB_COMPONENTS/hudi-kafka-connector/
 
-RUN mkdir -p $CONNECTORS_PATH && mkdir -p $DATA_PATH && mkdir -p $HUDI_KAFKA_CONNECTOR_PATH && \
-	confluent-hub install --no-prompt confluentinc/kafka-connect-hdfs2-source:latest && \
-	confluent-hub install --no-prompt confluentinc/kafka-connect-hdfs3:latest && \
-	confluent-hub install --no-prompt confluentinc/kafka-connect-hdfs3-source:latest && \
-	confluent-hub install --no-prompt confluentinc/kafka-connect-s3:latest && \
-	confluent-hub install --no-prompt confluentinc/kafka-connect-s3-source:latest && \
-	confluent-hub install --no-prompt confluentinc/kafka-connect-jdbc:latest && \
-	cp -r /usr/share/confluent-hub-components/confluentinc-kafka-connect-hdfs3/lib $HUDI_KAFKA_CONNECTOR_PATH/lib && \
-	confluent-hub install --no-prompt debezium/debezium-connector-postgresql:${DEBEZIUM_VERSION}
+# One layer for all of Confluent Hub. The hudi-kafka-connector directory reuses the
+# hdfs3 sink's lib/ because Hudi's connector needs the Hadoop/HDFS classes and does not
+# bundle them.
+RUN mkdir -p $CONNECTORS_PATH $DATA_PATH $HUDI_KAFKA_CONNECTOR_PATH \
+	&& for c in \
+	confluentinc/kafka-connect-hdfs2-source:$HDFS2_SOURCE_VERSION \
+	confluentinc/kafka-connect-hdfs3:$HDFS3_VERSION \
+	confluentinc/kafka-connect-hdfs3-source:$HDFS3_SOURCE_VERSION \
+	confluentinc/kafka-connect-s3:$S3_VERSION \
+	confluentinc/kafka-connect-s3-source:$S3_SOURCE_VERSION \
+	confluentinc/kafka-connect-jdbc:$JDBC_VERSION \
+	debezium/debezium-connector-postgresql:$DEBEZIUM_VERSION; do \
+	confluent-hub install --no-prompt "$c"; \
+	done \
+	&& cp -r $CONFLUENT_HUB_COMPONENTS/confluentinc-kafka-connect-hdfs3/lib $HUDI_KAFKA_CONNECTOR_PATH/lib
 
-#RUN confluent-hub install --no-prompt debezium/debezium-connector-mysql:${DEBEZIUM_VERSION} && \
-#	confluent-hub install --no-prompt debezium/debezium-connector-postgresql:${DEBEZIUM_VERSION}
-
+# S3A connector + matching AWS SDK, staged by build_docker_images.sh for the Hadoop
+# version this profile uses.
 COPY hadoop-s3-jars/* $HUDI_KAFKA_CONNECTOR_PATH/
 
-RUN wget -P $HUDI_KAFKA_CONNECTOR_PATH/ \
-	https://repo1.maven.org/maven2/org/apache/hudi/hudi-kafka-connect-bundle/$HUDI_VERSION/hudi-kafka-connect-bundle-$HUDI_VERSION.jar && \
-	git clone https://github.com/rangareddy/hudi-kafka-connect-demo.git $DATA_PATH/hudi-kafka-connect-demo && \
-	chown appuser:root -R $CONNECTORS_PATH $DATA_PATH
+ARG MVN_REPO_URL=https://repo1.maven.org/maven2
+RUN curl -fsSL "$MVN_REPO_URL/org/apache/hudi/hudi-kafka-connect-bundle/$HUDI_VERSION/hudi-kafka-connect-bundle-$HUDI_VERSION.jar" \
+	-o "$HUDI_KAFKA_CONNECTOR_PATH/hudi-kafka-connect-bundle-$HUDI_VERSION.jar" \
+	&& git clone --depth 1 https://github.com/rangareddy/hudi-kafka-connect-demo.git $DATA_PATH/hudi-kafka-connect-demo \
+	&& rm -rf $DATA_PATH/hudi-kafka-connect-demo/.git \
+	&& chown appuser:root -R $CONNECTORS_PATH $DATA_PATH
 
 USER appuser
-

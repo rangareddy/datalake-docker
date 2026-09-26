@@ -1,0 +1,13 @@
+# Confluent REST Proxy for the datalake stack.
+#
+# Wrapped rather than used directly so the stack pulls a tag this repo controls;
+# see Dockerfile.zookeeper for why.
+ARG CONFLUENT_VERSION=7.4.7
+FROM confluentinc/cp-kafka-rest:${CONFLUENT_VERSION}
+
+ARG CONFLUENT_VERSION
+LABEL maintainer="Ranga Reddy <rangareddy.avula@gmail.com>" \
+	description="Datalake Kafka REST Proxy image" \
+	upstream="confluentinc/cp-kafka-rest:${CONFLUENT_VERSION}"
+
+# Pure re-tag; the base already has nc for the healthcheck.

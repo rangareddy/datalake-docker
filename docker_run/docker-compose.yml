@@ -1,15 +1,18 @@
 services:
   zookeeper:
-    image: confluentinc/cp-zookeeper:${CONFLUENT_VERSION:-7.4.7}
+    # Same image as the broker. cp-kafka already ships zookeeper-server-start and the
+    # ZooKeeper jars, so a separate cp-zookeeper image was 825MB of duplicate content.
+    # What it does not ship is a ZooKeeper properties template - /etc/confluent/docker
+    # holds only kafka's - so the config is baked into ranga-kafka at
+    # /etc/kafka/zookeeper.properties, and the upstream entrypoint, which only knows how
+    # to start a broker, is replaced here. The ZOOKEEPER_* environment variables that
+    # cp-zookeeper understood are in that file instead.
+    image: rangareddy1988/ranga-kafka:${IMAGE_VERSION:-1.0.0}
     platform: ${PLATFORM:-linux/amd64}
     container_name: zookeeper
     restart: unless-stopped
-    environment:
-      ZOOKEEPER_SERVER_ID: 1
-      ZOOKEEPER_CLIENT_PORT: 2181
-      ZOOKEEPER_TICK_TIME: 2000
-      ZOOKEEPER_INIT_LIMIT: 5
-      ZOOKEEPER_SYNC_LIMIT: 2
+    entrypoint: ["zookeeper-server-start"]
+    command: ["/etc/kafka/zookeeper.properties"]
     ports:
       - "2181:2181"
     healthcheck:
@@ -23,7 +26,7 @@ services:
       - datalake
 
   kafka:
-    image: confluentinc/cp-kafka:${CONFLUENT_VERSION:-7.4.7}
+    image: rangareddy1988/ranga-kafka:${IMAGE_VERSION:-1.0.0}
     platform: ${PLATFORM:-linux/amd64}
     container_name: kafka
     restart: unless-stopped
@@ -55,22 +58,8 @@ services:
     networks:
       - datalake
 
-  kafka-init-topics:
-    image: confluentinc/cp-kafka:${CONFLUENT_VERSION:-7.4.7}
-    platform: ${PLATFORM:-linux/amd64}
-    container_name: kafka-init-topics
-    depends_on:
-      kafka:
-        condition: service_healthy
-    command: "bash -c 'echo Waiting for Kafka to be ready... && \
-      cub kafka-ready -b kafka:29092 1 30 && \
-      kafka-topics --create --topic hudi-test-topic --partitions 1 --replication-factor 1 --if-not-exists --bootstrap-server kafka:29092 && \
-      kafka-topics --list --bootstrap-server kafka:29092'"
-    networks:
-      - datalake
-
   kafka-schema-registry:
-    image: confluentinc/cp-schema-registry:${CONFLUENT_VERSION:-7.4.7}
+    image: rangareddy1988/ranga-kafka-schema-registry:${IMAGE_VERSION:-1.0.0}
     platform: ${PLATFORM:-linux/amd64}
     container_name: kafka-schema-registry
     restart: unless-stopped
@@ -88,7 +77,11 @@ services:
       - "8081:8081"
     healthcheck:
       test: nc -z localhost 8081 || exit 1
-      start_period: 20s
+      # 20s was not enough on a fully loaded "all" profile: the registry reads its
+      # _schemas topic from the beginning before it binds, and was still starting
+      # after two minutes. An unhealthy registry then blocks kafka-ui at start.
+      start_period: 120s
+      start_interval: 10s
       interval: 30s
       timeout: 30s
       retries: 5
@@ -96,7 +89,7 @@ services:
       - datalake
 
   kafka-rest:
-    image: confluentinc/cp-kafka-rest:${CONFLUENT_VERSION:-7.4.7}
+    image: rangareddy1988/ranga-kafka-rest:${IMAGE_VERSION:-1.0.0}
     platform: ${PLATFORM:-linux/amd64}
     container_name: kafka-rest
     restart: unless-stopped
@@ -112,7 +105,8 @@ services:
       - "8082:8082"
     healthcheck:
       test: nc -z localhost 8082 || exit 1
-      start_period: 20s
+      start_period: 120s
+      start_interval: 10s
       interval: 30s
       timeout: 30s
       retries: 5
@@ -120,7 +114,7 @@ services:
       - datalake
 
   kafka-connect:
-    image: rangareddy1988/ranga-kafka-connect:${KAFKA_CONNECT_VERSION:-7.4.7}
+    image: rangareddy1988/ranga-kafka-connect:${IMAGE_VERSION:-1.0.0}
     platform: ${PLATFORM:-linux/amd64}
     container_name: kafka-connect
     restart: unless-stopped
@@ -148,6 +142,12 @@ services:
       CONNECT_LOG4J_ROOT_LOGLEVEL: "INFO"
       CONNECT_LOG4J_LOGGERS: "org.apache.kafka.connect.runtime.rest=WARN,org.apache.zookeeper=ERROR,org.I0Itec.zkclient=ERROR,org.reflections=ERROR"
       CONNECT_PLUGIN_PATH: "/usr/share/java,/usr/share/confluent-hub-components,/opt/connectors"
+      # Connect defaults to -Xmx2G, and on the "all" profile that is what tips the
+      # Docker VM over: the kernel OOM-kills it (docker events shows "oom", exit 137),
+      # restart: unless-stopped brings it back, and it dies again part-way through the
+      # plugin scan - a loop that looks like a slow start rather than a memory problem.
+      # 1G is comfortable for this plugin set.
+      KAFKA_HEAP_OPTS: "-Xms256M -Xmx1024M"
     ports:
       - "8083:8083"
     volumes:
@@ -156,11 +156,11 @@ services:
       test: nc -z localhost 8083 || exit 1
       # Connect scans every plugin jar before it binds 8083. Measured at 112s on an
       # idle machine, against a budget of start_period + retries*interval = 170s - too
-      # little margin when the whole stack starts at once and competes for I/O. Losing
-      # that race does not just mark Connect unhealthy: kafka-ui has
-      # depends_on: condition: service_healthy, which is evaluated once at start, so
-      # kafka-ui never leaves "Created" and the UI appears to be broken.
-      start_period: 180s
+      # little margin when the whole stack starts at once and competes for I/O.
+      # kafka-ui used to wait on this being healthy and so vanished whenever Connect
+      # lost that race; it now waits only for the container to start, so a slow
+      # Connect costs a temporarily empty connector list rather than a missing UI.
+      start_period: 300s
       interval: 30s
       timeout: 30s
       retries: 5
@@ -168,7 +168,7 @@ services:
       - datalake
 
   kafka-cat:
-    image: rangareddy1988/ranga-kafka-cat:${CONFLUENT_KAFKACAT_VERSION:-latest}
+    image: rangareddy1988/ranga-kafka-cat:${IMAGE_VERSION:-1.0.0}
     platform: ${PLATFORM:-linux/amd64}
     container_name: kafka-cat
     restart: unless-stopped
@@ -179,17 +179,24 @@ services:
       - datalake
 
   kafka-ui:
-    image: provectuslabs/kafka-ui:${KAFKA_UI_VERSION:-latest}
+    image: rangareddy1988/ranga-kafka-ui:${IMAGE_VERSION:-1.0.0}
     platform: ${PLATFORM:-linux/amd64}
     container_name: kafka-ui
     restart: unless-stopped
     depends_on:
       kafka:
         condition: service_healthy
+      # Both of these are service_started for the same reason; see below.
       kafka-schema-registry:
-        condition: service_healthy
+        condition: service_started
+      # service_started, not service_healthy. Compose evaluates depends_on once at
+      # start, and Connect scans every plugin jar before it binds 8083 - measured at
+      # 112s idle and far longer under the "all" profile. Waiting for healthy meant
+      # kafka-ui was never started at all: Created, no logs, no UI, and nothing
+      # pointing at Connect as the cause. kafka-ui does not need Connect to be up; it
+      # shows the connector list as unavailable until Connect answers, then recovers.
       kafka-connect:
-        condition: service_healthy
+        condition: service_started
     environment:
       KAFKA_CLUSTERS_0_NAME: local
       KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
@@ -212,7 +219,7 @@ services:
       - datalake
 
   hive-metastore:
-    image: rangareddy1988/ranga-hive:${HIVE_VERSION:-latest}
+    image: rangareddy1988/ranga-hive:${IMAGE_VERSION:-1.0.0}
     platform: ${PLATFORM:-linux/amd64}
     container_name: hive-metastore
     restart: unless-stopped
@@ -240,7 +247,7 @@ services:
       - datalake
 
   hive-server:
-    image: rangareddy1988/ranga-hive:${HIVE_VERSION:-latest}
+    image: rangareddy1988/ranga-hive:${IMAGE_VERSION:-1.0.0}
     platform: ${PLATFORM:-linux/amd64}
     container_name: hive-server
     restart: unless-stopped
@@ -259,11 +266,22 @@ services:
     ports:
       - "10000:10000"
       - "10002:10002"
+    healthcheck:
+      # HiveServer2 had no healthcheck, so it reported no status at all and nothing
+      # could depend on it being ready. 10000 is the Thrift/JDBC port beeline uses.
+      # 180s of grace: it waits on the metastore, then initialises its own session
+      # manager, and 60s was not enough once the "all" profile was competing for CPU.
+      test: bash -c "exec 6<> /dev/tcp/localhost/10000"
+      start_period: 180s
+      start_interval: 15s
+      interval: 30s
+      timeout: 30s
+      retries: 5
     networks:
       - datalake
 
   spark-master:
-    image: rangareddy1988/${SPARK_IMAGE:-ranga-spark}:${SPARK_VERSION:-latest}
+    image: rangareddy1988/${SPARK_IMAGE:-ranga-spark}:${IMAGE_VERSION:-1.0.0}
     platform: ${PLATFORM:-linux/amd64}
     container_name: spark-master
     restart: unless-stopped
@@ -284,6 +302,9 @@ services:
       - ./data/spark-events:/opt/spark/spark-events
       - ./logs/spark-master:/var/log/spark
       - ./hudi_streamer:/opt/hudi_streamer
+      # Mounted rather than "docker cp"-ed, so demos/e2e_test.sh always exercises the
+      # working tree and a fix to a demo needs no copy step to take effect.
+      - ../demos:/opt/demos:ro
     healthcheck:
       test: bash -c "exec 6<> /dev/tcp/localhost/8080"
       start_period: 20s
@@ -294,7 +315,7 @@ services:
       - datalake
 
   spark-worker:
-    image: rangareddy1988/${SPARK_IMAGE:-ranga-spark}:${SPARK_VERSION:-latest}
+    image: rangareddy1988/${SPARK_IMAGE:-ranga-spark}:${IMAGE_VERSION:-1.0.0}
     platform: ${PLATFORM:-linux/amd64}
     container_name: spark-worker
     restart: unless-stopped
@@ -323,7 +344,7 @@ services:
       - datalake
 
   postgres:
-    image: postgres:${POSTGRES_VERSION:-16.4}
+    image: rangareddy1988/ranga-postgres:${IMAGE_VERSION:-1.0.0}
     platform: ${PLATFORM:-linux/amd64}
     container_name: postgres
     restart: unless-stopped
@@ -349,7 +370,7 @@ services:
       - datalake
 
   minio:
-    image: quay.io/minio/minio:${MINIO_VERSION:-latest}
+    image: rangareddy1988/ranga-minio:${IMAGE_VERSION:-1.0.0}
     platform: ${PLATFORM:-linux/amd64}
     container_name: minio
     restart: unless-stopped
@@ -364,7 +385,11 @@ services:
       - ./data/minio:/data
     command: ["server", "/data", "--console-address", ":9001"]
     healthcheck:
-      test: bash -c ':> /dev/tcp/127.0.0.1/9000' || exit 1
+      # MinIO's own liveness endpoint, not a bare TCP probe: an open port only says
+      # the process bound it, while /minio/health/live says the object store is
+      # actually serving. ranga-minio also declares this as a HEALTHCHECK, so a
+      # plain "docker run" of the image reports the same thing.
+      test: curl -fsS http://localhost:9000/minio/health/live || exit 1
       start_period: 20s
       interval: 30s
       timeout: 30s
@@ -375,7 +400,9 @@ services:
           - warehouse.minio
 
   mc:
-    image: quay.io/minio/mc:${MINIO_MC_VERSION:-latest}
+    # The MinIO server image already contains the mc client at /usr/bin/mc, so there is
+    # no separate client image: this is ranga-minio with a different entrypoint.
+    image: rangareddy1988/ranga-minio:${IMAGE_VERSION:-1.0.0}
     platform: ${PLATFORM:-linux/amd64}
     container_name: mc
     depends_on:
@@ -392,30 +419,11 @@ services:
       /usr/bin/mc anonymous set public minio/datalake;
       tail -f /dev/null
       "
-    networks:
-      - datalake
-
-  cloudbeaver:
-    image: dbeaver/cloudbeaver:${CLOUDBEAVER_VERSION:-latest}
-    container_name: cloudbeaver
-    restart: unless-stopped
-    depends_on:
-      postgres:
-        condition: service_healthy
-    environment:
-      admin_user: "cbadmin"
-      admin_password: "Cbadmin123"
-    ports:
-      - "8978:8978"
-    volumes:
-      - ./data/cloudbeaver:/opt/cloudbeaver/workspace
     healthcheck:
-      # The cloudbeaver image has curl but not nc, so an nc probe here reports
-      # unhealthy forever even while the UI serves normally.
-      test: curl -sf http://localhost:8978 >/dev/null || exit 1
-      interval: 30s
-      timeout: 30s
-      retries: 5
+      # ranga-minio declares a HEALTHCHECK against the MinIO server's /minio/health/live.
+      # This container runs the client, not the server, so that probe would fail forever
+      # and report a working sidecar as unhealthy.
+      disable: true
     networks:
       - datalake
 

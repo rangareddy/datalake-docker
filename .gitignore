@@ -28,3 +28,6 @@ docker_run/data
 
 # staged AWS/Hadoop S3 jars, cached per Hadoop version
 .s3-jar-cache/
+
+# Written by demos/e2e_test.sh; records which image IDs passed the last green run.
+.e2e-passed

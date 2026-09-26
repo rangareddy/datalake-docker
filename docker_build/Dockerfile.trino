@@ -1,14 +1,16 @@
-ARG TRINO_VERSION=${TRINO_VERSION:-460}
+# Trino for the "all" profile: one SQL engine over the Hive, Iceberg, Hudi, Delta and
+# Postgres catalogs that the rest of the stack writes.
+ARG TRINO_VERSION=483
 FROM trinodb/trino:${TRINO_VERSION}
 
-SHELL ["/bin/bash", "-c"]
+ARG TRINO_VERSION
+LABEL maintainer="Ranga Reddy <rangareddy.avula@gmail.com>" \
+	description="Datalake Trino image" \
+	upstream="trinodb/trino:${TRINO_VERSION}"
 
-LABEL maintainer="Ranga Reddy <rangareddy.avula@gmail.com>"
-LABEL description="Datalake Trino image"
-
+# Catalog properties are baked in rather than mounted so the image is self-describing:
+# what it can query is fixed by the tag, not by what happens to be on the host.
 USER root
-
 COPY conf/trino/catalog /etc/trino/catalog
 RUN chmod 755 /etc/trino/catalog
-
 USER trino

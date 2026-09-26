@@ -1,0 +1,21 @@
+# PostgreSQL for the datalake stack: Hive Metastore's backing database, Kafka
+# Connect's offset store and the Debezium CDC source.
+#
+# Wrapped so the stack pulls a tag this repo controls; see Dockerfile.zookeeper.
+# The pin matters more here than elsewhere: the data directory is a bind mount, and
+# a major-version bump would leave Postgres refusing to start against an older
+# PGDATA ("database files are incompatible with server").
+ARG POSTGRES_VERSION=16.4
+FROM postgres:${POSTGRES_VERSION}
+
+ARG POSTGRES_VERSION
+LABEL maintainer="Ranga Reddy <rangareddy.avula@gmail.com>" \
+	description="Datalake PostgreSQL image" \
+	upstream="postgres:${POSTGRES_VERSION}"
+
+# Seed SQL stays a bind mount from docker_run/db_scripts rather than being baked in,
+# so editing it is a restart and not a rebuild. Nothing is added on top of the base.
+
+# Debezium needs logical decoding; the default is "replica", which emits no row
+# images and makes every CDC connector fail at startup.
+CMD ["postgres", "-c", "wal_level=logical"]
