@@ -166,6 +166,25 @@ pins those versions to match the build script's defaults. A pin that was never b
 try to pull a nonexistent tag from Docker Hub, so `.env` and `build_docker_images.sh` must move
 together.
 
+### kafka-connect gates kafka-ui
+
+`kafka-ui` declares `depends_on: kafka-connect: condition: service_healthy`, and Compose
+evaluates that **once, at start**. If Connect is not healthy at that moment, kafka-ui is
+never started at all - it sits in `Created`, the UI is simply absent, and nothing in the
+kafka-ui logs explains why, because it has no logs. Two things have caused that:
+
+- **Connect crash-looping on a Debezium the JVM cannot load.** `UnsupportedClassVersionError`
+  for a class compiled at 61.0 (Java 17) on `cp-server-connect-base:7.4.7`, which runs Java
+  11. Debezium 3.x is Java 17; `DEBEZIUM_VERSION` is therefore pinned to 2.5.4, which is also
+  the oldest version Confluent Hub still serves - the previous 2.4.2 pin failed the build
+  outright with "Component not found". Moving to Debezium 3.x means a Java 17 base image.
+- **Connect simply being slow.** It scans every plugin jar before binding 8083, measured at
+  112s idle. The old `start_period: 20s` plus five 30s retries gave 170s, which the whole
+  stack starting at once could exceed. It is now 180s of grace.
+
+When the UI is missing, check `docker ps -a` for a `Created` kafka-ui and then Connect's
+health - not kafka-ui itself.
+
 ### Container lifecycle
 
 Custom images (`spark`, `xtable`, `kafka-cat`) end their entrypoint with a

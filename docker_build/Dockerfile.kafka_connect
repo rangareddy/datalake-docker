@@ -15,7 +15,20 @@ ARG CONFLUENT_HUB_COMPONENTS="/usr/share/confluent-hub-components"
 ARG CONNECTORS_PATH="/opt/connectors"
 ARG DATA_PATH="/opt/data"
 ARG HUDI_VERSION=${HUDI_VERSION:-1.1.1}
-ARG DEBEZIUM_VERSION=${DEBEZIUM_VERSION:-2.4.2}
+# Debezium 2.5.4 is the newest release that still runs here, and both halves of that
+# sentence matter:
+#
+#   - Confluent Hub no longer serves 2.4.2 at all. The oldest it offers is 2.5.3, so the
+#     previous pin failed the build outright with "Component not found".
+#   - Debezium 3.x is compiled for Java 17 (class file 61.0) and this base image,
+#     confluentinc/cp-server-connect-base:7.4.7, runs Java 11 (class file 55.0). A 3.x
+#     connector loads far enough to be scanned and then kills Connect at startup with
+#     UnsupportedClassVersionError, which looks like a healthcheck problem: Connect never
+#     binds 8083, so kafka-ui sits in Created forever waiting on a dependency that is
+#     restarting in a loop.
+#
+# Moving to Debezium 3.x means moving to a Confluent base image built on Java 17.
+ARG DEBEZIUM_VERSION=${DEBEZIUM_VERSION:-2.5.4}
 
 ENV CONNECT_PLUGIN_PATH="/usr/share/java,$CONFLUENT_HUB_COMPONENTS,$CONNECTORS_PATH" \
 	CONNECT_LOG4J_ROOT_LOGLEVEL="INFO" \

@@ -844,6 +844,28 @@ actually built.
 
 ## Troubleshooting
 
+### kafka-ui is missing entirely
+
+`docker ps -a` shows `kafka-ui` as `Created`, never `Up`, and it has no logs.
+
+kafka-ui has `depends_on: kafka-connect: condition: service_healthy`, which Compose checks
+once at start. If Connect is not healthy then, kafka-ui is skipped. Check Connect, not the
+UI:
+
+```sh
+docker inspect kafka-connect --format '{{.State.Health.Status}} restarts={{.RestartCount}}'
+docker logs kafka-connect 2>&1 | grep -i unsupportedclassversion
+```
+
+A climbing restart count with `UnsupportedClassVersionError` means a connector compiled for
+a newer Java than the image runs - Debezium 3.x is Java 17, this image is Java 11. Rebuild
+it with `IMAGES=kafka-connect ./docker_build/build_docker_images.sh`; a published image can
+be older than this repo.
+
+Connect that is merely slow needs no action beyond waiting: it scans every plugin jar before
+binding 8083, around 112s on an idle machine, and the healthcheck allows 180s before it
+counts a failure.
+
 | Symptom | Cause and fix |
 | ------- | ------------- |
 | `service "x" depends on undefined service "y": invalid compose project` | The two compose files drifted. Run `sh docker_run/run_datalake.sh validate` on both profiles |
