@@ -23,7 +23,6 @@ HIVE_VERSION=${HIVE_VERSION:-4.0.0}
 SPARK_VERSION=${SPARK_VERSION:-3.5.9}
 TRINO_VERSION=${TRINO_VERSION:-483}
 KAFKA_CONNECT_VERSION=${KAFKA_CONNECT_VERSION:-7.4.7}
-CONFLUENT_KAFKACAT_VERSION=${CONFLUENT_KAFKACAT_VERSION:-7.1.15}
 
 # Third-party services are rebuilt under rangareddy1988/ranga-* rather than pulled
 # straight from their publishers. The stack then depends only on tags this repo
@@ -123,8 +122,8 @@ MVN_REPO_URL="https://repo1.maven.org/maven2"
 #   core      everything docker-compose.yml starts, i.e. not the "all" extras
 IMAGES=${IMAGES:-}
 GROUP_UPSTREAM="kafka kafka-schema-registry kafka-rest kafka-ui postgres minio mysql"
-GROUP_ENGINES="hive $SPARK_IMAGE_NAME kafka-connect kafka-cat trino"
-GROUP_CORE="kafka kafka-schema-registry kafka-rest kafka-ui postgres minio hive $SPARK_IMAGE_NAME kafka-connect kafka-cat"
+GROUP_ENGINES="hive $SPARK_IMAGE_NAME kafka-connect trino"
+GROUP_CORE="kafka kafka-schema-registry kafka-rest kafka-ui postgres minio hive $SPARK_IMAGE_NAME kafka-connect"
 
 expand_images() {
   local out=""
@@ -219,9 +218,9 @@ needs_any hive trino && download_db_connector_jars
 #
 # <component-version> is what goes into the image as a build arg; the *tag* is always
 # IMAGE_VERSION. <version-arg> is passed explicitly rather than derived from the image
-# name: deriving it silently sent KAFKA_CAT_VERSION to a Dockerfile that declares
-# CONFLUENT_KAFKACAT_VERSION, and Docker only warns about an unknown --build-arg, so
-# that image quietly built whatever its ARG default happened to be.
+# name. Deriving it was silently wrong for two images, and Docker only warns about an
+# unknown --build-arg, so both quietly built whatever their ARG default happened to be.
+# Any new entry in image_builds must name its arg.
 build_docker_image() {
   local image_name="$1" component_version="$2" dockerfile="$3" version_arg="$4"
   shift 4
@@ -246,10 +245,10 @@ build_docker_image() {
 # The first block is the third-party wrappers: thin, pinned re-tags that move the stack
 # off tags other people control. The second is what this repo assembles.
 #
-# There is no separate zookeeper, minio-mc or jupyter image. cp-kafka already ships
-# zookeeper-server-start, the MinIO image already ships mc, and the Spark image already
-# ships JupyterLab and its kernels, so those three services run from ranga-kafka,
-# ranga-minio and ranga-spark respectively - about 4.8GB of duplicated content removed.
+# There is no separate zookeeper, minio-mc, jupyter or kcat image. cp-kafka already ships
+# zookeeper-server-start and the kafka-console-* tools, the MinIO image already ships mc,
+# and the Spark image already ships JupyterLab and its kernels - so those services run
+# from ranga-kafka, ranga-minio and ranga-spark. About 5.6GB of duplicated content gone.
 declare -a image_builds=(
   "kafka $CONFLUENT_VERSION kafka CONFLUENT_VERSION"
   "kafka-schema-registry $CONFLUENT_VERSION kafka_schema_registry CONFLUENT_VERSION"
@@ -261,7 +260,6 @@ declare -a image_builds=(
   "hive $HIVE_VERSION hive HIVE_VERSION"
   "$SPARK_IMAGE_NAME $SPARK_VERSION $SPARK_DOCKERFILE SPARK_VERSION"
   "kafka-connect $KAFKA_CONNECT_VERSION kafka_connect KAFKA_CONNECT_VERSION"
-  "kafka-cat $CONFLUENT_KAFKACAT_VERSION kafka_cat CONFLUENT_KAFKACAT_VERSION"
   "trino $TRINO_VERSION trino TRINO_VERSION"
 )
 

@@ -36,10 +36,9 @@ IMAGES=core ./docker_build/build_docker_images.sh        # everything docker-com
 ```
 
 `build_docker_image` takes the build-arg name as an explicit argument rather than deriving it from
-the image name. Deriving it was silently wrong for two images - `kafka-cat` sent `KAFKA_CAT_VERSION`
-to a Dockerfile declaring `CONFLUENT_KAFKACAT_VERSION`, `jupyter-notebook` sent
-`JUPYTER_NOTEBOOK_VERSION` to one declaring `JUPYTER_VERSION` - and Docker only warns about an
-unknown `--build-arg`, so both quietly built whatever their `ARG` default happened to be. Any new
+the image name. Deriving it was silently wrong for two images whose Dockerfile declared a
+differently-named `ARG`, and Docker only warns about an unknown `--build-arg`, so both quietly
+built whatever their `ARG` default happened to be. Any new
 entry in `image_builds` must name its arg.
 
 ### One version for the whole stack
@@ -70,7 +69,11 @@ exists:
 | `mc` | `ranga-minio` | The server image already contains `/usr/bin/mc`. Its healthcheck is `disable: true`, because `ranga-minio` declares a `HEALTHCHECK` against a MinIO server this container is not running |
 | `jupyter-notebook` | `ranga-spark` | The Spark image installs JupyterLab, spylon and IJava from `requirements.txt`. It starts with `SPARK_MODE=notebook`, which `scripts/spark/entrypoint.sh` handles |
 
-That is roughly 4.8GB of duplicated content not built, not pulled and not stored. Before adding a
+There is no kcat container either: `cp-kafkacat` was an 839MB image for a CLI whose job the
+broker image already does with `kafka-topics`, `kafka-console-consumer` and
+`kafka-broker-api-versions`.
+
+That is roughly 5.6GB of duplicated content not built, not pulled and not stored. Before adding a
 new image, check whether an existing one already carries what the service needs.
 
 ### Nothing is pulled from a third party at run time
@@ -324,7 +327,7 @@ health - not kafka-ui itself.
 
 ### Container lifecycle
 
-Custom images (`spark`, `kafka-cat`) end their entrypoint with a
+The Spark image ends its entrypoint with a
 `while true; do sleep 1000; done` keepalive — the container being "up" says nothing about the
 service inside. `docker_build/check_service_status_utility.sh` (baked in at
 `/opt/check_service_status_utility.sh`) polls `jps` to verify a JVM process actually started.

@@ -78,7 +78,7 @@ running() { [ "$(docker inspect -f '{{.State.Running}}' "$1" 2>/dev/null)" = "tr
 health() { docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$1" 2>/dev/null; }
 
 # ---------------------------------------------------------------- container state
-CORE_SERVICES="zookeeper kafka kafka-schema-registry kafka-rest kafka-connect kafka-cat kafka-ui hive-metastore hive-server spark-master spark-worker postgres minio mc"
+CORE_SERVICES="zookeeper kafka kafka-schema-registry kafka-rest kafka-connect kafka-ui hive-metastore hive-server spark-master spark-worker postgres minio mc"
 ALL_EXTRA="trino jupyter-notebook mysql"
 
 SERVICES="$CORE_SERVICES"
@@ -166,8 +166,10 @@ check "kafka:broker-api" "$SUFFIX" \
 # A real round trip: produce one record, then consume it back from the beginning.
 check "kafka:produce-consume" "e2e-message" \
 	dex kafka sh -c "echo e2e-message | kafka-console-producer --bootstrap-server kafka:29092 --topic e2e-$SUFFIX >/dev/null 2>&1; kafka-console-consumer --bootstrap-server kafka:29092 --topic e2e-$SUFFIX --from-beginning --max-messages 1 --timeout-ms 20000 2>/dev/null"
-check "kafka:kcat-metadata" "broker" \
-	dex kafka-cat kafkacat -b kafka:29092 -L
+# Same claim kcat's -L made: the broker is reachable and advertising itself. This comes
+# from the broker image's own tooling, which is why there is no kcat container any more.
+check "kafka:broker-metadata" "id: 1" \
+	dex kafka kafka-broker-api-versions --bootstrap-server kafka:29092
 
 section "schema registry"
 check "schema-registry:subjects" "" \

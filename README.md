@@ -33,8 +33,8 @@ Everything is Docker images plus a Compose stack. There is no application code t
 | Requirement | Detail |
 | ----------- | ------ |
 | Docker      | With Compose v2 (`docker compose`). The v1 `docker-compose` binary also works |
-| Disk        | About 20 GB. The 13 images total roughly 17 GB, and the build inputs another 1.5 GB |
-| Memory      | 8 GB for the `core` profile (15 containers), 10 GB for `all` (17). Most are JVMs. Too little shows up as the daemon thrashing — health checks that should take a second take minutes, and the kernel OOM-kills whichever JVM is largest — which looks like broken services rather than a memory problem |
+| Disk        | About 19 GB. The 12 images total roughly 16 GB, and the build inputs another 1.5 GB |
+| Memory      | 8 GB for the `core` profile (14 containers), 10 GB for `all` (16). Most are JVMs. Too little shows up as the daemon thrashing — health checks that should take a second take minutes, and the kernel OOM-kills whichever JVM is largest — which looks like broken services rather than a memory problem |
 | Network     | The first build downloads the Spark and Hadoop tarballs plus about 40 jars from Maven Central |
 | Free ports  | 2181, 3306, 5432, 7077, 8080-8083, 8888, 9000-9001, 9082, 9084, 9092, 9101, 10000, 10002, 14040-14042, 18080-18081, 29092 |
 
@@ -73,7 +73,7 @@ What it does, in order:
 3. Builds every entry in the `image_builds` array: the third-party wrappers
    (`kafka`, `kafka-schema-registry`, `kafka-rest`, `kafka-ui`, `postgres`, `minio`,
    `mysql`) and then the images this repo assembles (`hive`, `spark`, `kafka-connect`,
-   `kafka-cat`, `trino`). See [Where the images come from](#where-the-images-come-from)
+   `trino`). See [Where the images come from](#where-the-images-come-from)
    for why the first group exists.
 
 Each image prints a line on success:
@@ -93,7 +93,7 @@ gated on the selection, so a wrapper-only run does not fetch the Spark and Hadoo
 
 ```sh
 IMAGES=upstream ./docker_build/build_docker_images.sh   # the ten wrappers; seconds, not minutes
-IMAGES=engines  ./docker_build/build_docker_images.sh   # spark, hive, connect, kcat, trino
+IMAGES=engines  ./docker_build/build_docker_images.sh   # spark, hive, connect, trino
 IMAGES=core     ./docker_build/build_docker_images.sh   # everything docker-compose.yml starts
 IMAGES=spark,hive ./docker_build/build_docker_images.sh # or name images individually
 ```
@@ -220,7 +220,7 @@ Each line is `PASS`, `FAIL` or `SKIP`, and the exit status is non-zero if anythi
   PASS  kafka:zookeeper-ruok               imok
   PASS  kafka:broker-api                   e2e-e2e
   PASS  kafka:produce-consume              e2e-message
-  PASS  kafka:kcat-metadata                Metadata for all topics
+  PASS  kafka:broker-metadata              kafka:29092 (id: 1 rack: null)
 
 == spark
   PASS  spark:master-ui                    Spark Master at spark://spark-master:7077
@@ -257,8 +257,7 @@ If you would rather look at the containers directly:
 sh docker_run/run_datalake.sh status
 ```
 
-Every row should read `Up ... (healthy)`, except `mc` and `kafka-cat`, which have no health
-check defined, and `kafka-init-topics`, which creates the demo topic and exits 0:
+Every row should read `Up ... (healthy)`, except `mc`, which has no health check defined, and `kafka-init-topics`, which creates the demo topic and exits 0:
 
 ```
 NAME             IMAGE                                       SERVICE          STATUS
@@ -367,7 +366,18 @@ already exists:
 | `mc` | `ranga-minio` | The MinIO server image already contains the `mc` client at `/usr/bin/mc` |
 | `jupyter-notebook` | `ranga-spark` | The Spark image already installs JupyterLab and the Python, Scala (spylon) and Java (IJava) kernels. A separate 3.2GB jupyter image duplicated all of it — and a notebook next to Spark can actually use Spark, which the standalone one could not. It starts with `SPARK_MODE=notebook` |
 
-That is about 4.8GB of duplicated content not built, not pulled and not stored.
+There is no `kcat` container either. `cp-kafkacat` was an 839MB image for a CLI whose
+job — inspect topics and broker metadata from inside the network — the broker image
+already does with `kafka-topics`, `kafka-console-consumer` and
+`kafka-broker-api-versions`:
+
+```sh
+docker exec kafka kafka-broker-api-versions --bootstrap-server kafka:29092
+docker exec kafka kafka-topics --bootstrap-server kafka:29092 --list
+```
+
+Altogether that is about 5.6GB of duplicated content not built, not pulled and not
+stored.
 
 ### Why bother
 
@@ -514,7 +524,6 @@ Scala 2.13, Iceberg-only set):
 | --------- | ------- | ----- |
 | Kafka, Schema Registry, REST Proxy | Confluent 7.4.7 | The broker image also serves ZooKeeper |
 | Kafka Connect | Confluent 7.4.7 + Debezium 2.5.4 | Debezium 3.x is Java 17 and this base runs Java 11 |
-| kcat | Confluent 7.1.15 | The last `cp-kafkacat` release |
 | Kafka UI | provectuslabs v0.7.2 | The last build before the project was discontinued |
 | PostgreSQL | 16.4 | Metastore backing store, Connect offsets, and the CDC source |
 | MySQL | ubuntu/mysql 8.0 | `all` profile only; the second CDC source |

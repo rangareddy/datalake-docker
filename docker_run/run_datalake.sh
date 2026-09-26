@@ -59,7 +59,11 @@ start_datalake() {
 
 stop_datalake() {
     echo "Stopping Datalake services ($PROFILE profile)..."
-    compose down
+    # --remove-orphans: a plain "down" leaves behind any container whose service has
+    # since been deleted from the compose file. Those keep running, keep their ports and
+    # keep their image pinned, so a removed component looks removed in git and is still
+    # up in Docker.
+    compose down --remove-orphans
     echo "Datalake services are stopped."
 }
 

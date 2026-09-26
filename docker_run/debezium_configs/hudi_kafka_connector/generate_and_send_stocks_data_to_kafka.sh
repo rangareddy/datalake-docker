@@ -53,6 +53,9 @@ for ((i = 1; i <= numBatch; i++)); do
     fi
   done
 
+  # kafka-console-producer, not kafkacat. The kcat container is gone - it was an 839MB
+  # image for a CLI the broker image already covers - so this runs in the broker:
+  #   docker exec -i kafka bash /path/to/this/script
   echo "Publishing stock data to Kafka topic ${KAFKA_TOPIC_NAME}..."
-  grep -v '^$' ${EVENTS_FILE} | kafkacat -b "${KAFKA_HOSTNAME}:${KAFKA_PORT}" -t "${KAFKA_TOPIC_NAME}" -T -P
+  grep -v '^$' ${EVENTS_FILE} | kafka-console-producer --bootstrap-server "${KAFKA_HOSTNAME}:${KAFKA_PORT}" --topic "${KAFKA_TOPIC_NAME}"
 done
